@@ -10,6 +10,8 @@ interface Trip {
   description: string
   start_date: string
   end_date: string
+  budget: number
+  cover_image: string
 }
 
 export default function Dashboard() {
@@ -22,6 +24,7 @@ export default function Dashboard() {
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [budget, setBudget] = useState('')
   const [userEmail, setUserEmail] = useState('')
 
   const fetchTrips = async () => {
@@ -39,12 +42,26 @@ export default function Dashboard() {
     setLoading(false)
   }
 
+  const fetchCoverImage = async (query: string): Promise<string> => {
+    try {
+      const res = await fetch(
+        `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`,
+        { headers: { Authorization: `Client-ID ${process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY}` } }
+      )
+      const data = await res.json()
+      return data.results?.[0]?.urls?.regular || ''
+    } catch {
+      return ''
+    }
+  }
+
   const openCreateForm = () => {
     setEditingTrip(null)
     setName('')
     setDescription('')
     setStartDate('')
     setEndDate('')
+    setBudget('')
     setShowForm(true)
   }
 
@@ -55,6 +72,7 @@ export default function Dashboard() {
     setDescription(trip.description || '')
     setStartDate(trip.start_date || '')
     setEndDate(trip.end_date || '')
+    setBudget(trip.budget?.toString() || '')
     setShowForm(true)
   }
 
@@ -63,17 +81,23 @@ export default function Dashboard() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
+    const cover_image = await fetchCoverImage(name)
+
     if (editingTrip) {
       await supabase.from('trips').update({
         name, description,
         start_date: startDate || null,
         end_date: endDate || null,
+        budget: parseFloat(budget) || 0,
+        cover_image,
       }).eq('id', editingTrip.id)
     } else {
       await supabase.from('trips').insert({
         user_id: user.id, name, description,
         start_date: startDate || null,
         end_date: endDate || null,
+        budget: parseFloat(budget) || 0,
+        cover_image,
       })
     }
 
@@ -126,17 +150,8 @@ export default function Dashboard() {
           cursor: pointer;
         }
 
-        .nav-right {
-          display: flex;
-          align-items: center;
-          gap: 1.5rem;
-        }
-
-        .nav-email {
-          font-size: 0.8rem;
-          color: #8a8070;
-          letter-spacing: 0.05em;
-        }
+        .nav-right { display: flex; align-items: center; gap: 1.5rem; }
+        .nav-email { font-size: 0.8rem; color: #8a8070; letter-spacing: 0.05em; }
 
         .btn-logout {
           background: transparent;
@@ -164,19 +179,8 @@ export default function Dashboard() {
           border-bottom: 1px solid #e8e0d0;
         }
 
-        .dashboard-title {
-          font-family: 'Playfair Display', serif;
-          font-size: 3rem;
-          color: #1a1612;
-          line-height: 1;
-        }
-
-        .dashboard-subtitle {
-          font-size: 0.85rem;
-          color: #8a8070;
-          margin-top: 0.5rem;
-          letter-spacing: 0.05em;
-        }
+        .dashboard-title { font-family: 'Playfair Display', serif; font-size: 3rem; color: #1a1612; line-height: 1; }
+        .dashboard-subtitle { font-size: 0.85rem; color: #8a8070; margin-top: 0.5rem; letter-spacing: 0.05em; }
 
         .btn-primary {
           background: #0a0a0a;
@@ -202,13 +206,7 @@ export default function Dashboard() {
           margin-bottom: 2.5rem;
         }
 
-        .form-title {
-          font-family: 'Playfair Display', serif;
-          font-size: 1.5rem;
-          margin-bottom: 1.5rem;
-          color: #1a1612;
-        }
-
+        .form-title { font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 1.5rem; color: #1a1612; }
         .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
         .form-full { grid-column: 1 / -1; }
 
@@ -226,7 +224,6 @@ export default function Dashboard() {
         }
 
         .form-input:focus { border-color: #d4af37; background: #fff; }
-
         .form-actions { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
 
         .btn-secondary {
@@ -245,64 +242,75 @@ export default function Dashboard() {
 
         .trips-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
           gap: 1.5rem;
         }
 
         .trip-card {
           background: #fff;
           border: 1px solid #e8e0d0;
-          border-radius: 8px;
-          padding: 2rem;
+          border-radius: 12px;
           cursor: pointer;
           transition: all 0.25s;
-          position: relative;
           overflow: hidden;
         }
 
-        .trip-card::before {
-          content: '';
-          position: absolute;
-          top: 0; left: 0;
-          width: 3px; height: 100%;
-          background: #d4af37;
-          transform: scaleY(0);
-          transition: transform 0.25s;
-          transform-origin: bottom;
+        .trip-card:hover { transform: translateY(-4px); box-shadow: 0 16px 50px rgba(0,0,0,0.1); }
+
+        .trip-cover {
+          width: 100%;
+          height: 180px;
+          object-fit: cover;
+          display: block;
+          background: #e8e0d0;
         }
 
-        .trip-card:hover { border-color: #d4af37; transform: translateY(-3px); box-shadow: 0 12px 40px rgba(0,0,0,0.08); }
-        .trip-card:hover::before { transform: scaleY(1); }
-
-        .trip-number {
-          font-size: 0.7rem;
-          letter-spacing: 0.2em;
-          text-transform: uppercase;
-          color: #d4af37;
-          margin-bottom: 0.75rem;
+        .trip-cover-placeholder {
+          width: 100%;
+          height: 180px;
+          background: linear-gradient(135deg, #1a1612 0%, #3a3530 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 3rem;
         }
 
-        .trip-name {
-          font-family: 'Playfair Display', serif;
-          font-size: 1.5rem;
-          color: #1a1612;
-          margin-bottom: 0.5rem;
-          line-height: 1.2;
+        .trip-body { padding: 1.5rem; }
+
+        .trip-number { font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: #d4af37; margin-bottom: 0.5rem; }
+        .trip-name { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: #1a1612; margin-bottom: 0.4rem; line-height: 1.2; }
+        .trip-description { font-size: 0.85rem; color: #8a8070; line-height: 1.6; margin-bottom: 1rem; }
+        .trip-dates { font-size: 0.75rem; letter-spacing: 0.05em; color: #b0a090; margin-bottom: 1rem; }
+
+        .trip-budget-bar {
+          margin-bottom: 1rem;
         }
 
-        .trip-description { font-size: 0.85rem; color: #8a8070; line-height: 1.6; margin-bottom: 1.25rem; }
-
-        .trip-dates {
+        .budget-bar-header {
+          display: flex;
+          justify-content: space-between;
           font-size: 0.75rem;
-          letter-spacing: 0.05em;
-          color: #b0a090;
-          margin-bottom: 1.25rem;
+          color: #8a8070;
+          margin-bottom: 0.4rem;
+        }
+
+        .budget-bar-track {
+          height: 4px;
+          background: #f0ebe0;
+          border-radius: 2px;
+          overflow: hidden;
+        }
+
+        .budget-bar-fill {
+          height: 100%;
+          border-radius: 2px;
+          transition: width 0.3s ease;
         }
 
         .trip-actions {
           display: flex;
           gap: 0.5rem;
-          padding-top: 1.25rem;
+          padding-top: 1rem;
           border-top: 1px solid #f0ebe0;
         }
 
@@ -333,18 +341,10 @@ export default function Dashboard() {
 
         .btn-delete:hover { color: #c07060; background: #fdf0ee; }
 
-        .empty-state {
-          text-align: center;
-          padding: 5rem 2rem;
-          color: #8a8070;
-        }
+        .empty-state { text-align: center; padding: 5rem 2rem; color: #8a8070; }
+        .empty-title { font-family: 'Playfair Display', serif; font-size: 2rem; color: #1a1612; margin-bottom: 0.75rem; }
 
-        .empty-title {
-          font-family: 'Playfair Display', serif;
-          font-size: 2rem;
-          color: #1a1612;
-          margin-bottom: 0.75rem;
-        }
+        .form-label { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8070; margin-bottom: 0.4rem; display: block; }
       `}</style>
 
       <div className="dashboard">
@@ -369,10 +369,26 @@ export default function Dashboard() {
             <div className="form-card">
               <h2 className="form-title">{editingTrip ? 'Modifier le voyage' : 'Nouveau voyage'}</h2>
               <div className="form-grid">
-                <input className="form-input form-full" type="text" placeholder="Nom du voyage *" value={name} onChange={e => setName(e.target.value)} />
-                <input className="form-input form-full" type="text" placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} />
-                <input className="form-input" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-                <input className="form-input" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                <div className="form-full">
+                  <label className="form-label">Nom du voyage *</label>
+                  <input className="form-input" type="text" placeholder="Ex: Road trip en Bretagne" value={name} onChange={e => setName(e.target.value)} />
+                </div>
+                <div className="form-full">
+                  <label className="form-label">Description</label>
+                  <input className="form-input" type="text" placeholder="Une courte description" value={description} onChange={e => setDescription(e.target.value)} />
+                </div>
+                <div>
+                  <label className="form-label">Date de départ</label>
+                  <input className="form-input" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="form-label">Date de retour</label>
+                  <input className="form-input" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                </div>
+                <div className="form-full">
+                  <label className="form-label">Budget prévisionnel (€)</label>
+                  <input className="form-input" type="number" placeholder="Ex: 2000" value={budget} onChange={e => setBudget(e.target.value)} />
+                </div>
               </div>
               <div className="form-actions">
                 <button className="btn-primary" onClick={saveTrip}>{editingTrip ? 'Enregistrer' : 'Créer'}</button>
@@ -390,20 +406,43 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="trips-grid">
-              {trips.map((trip, index) => (
-                <div key={trip.id} className="trip-card" onClick={() => router.push(`/trip/${trip.id}`)}>
-                  <div className="trip-number">Voyage {String(index + 1).padStart(2, '0')}</div>
-                  <h2 className="trip-name">{trip.name}</h2>
-                  {trip.description && <p className="trip-description">{trip.description}</p>}
-                  {trip.start_date && (
-                    <p className="trip-dates">{trip.start_date} → {trip.end_date}</p>
-                  )}
-                  <div className="trip-actions">
-                    <button className="btn-edit" onClick={e => openEditForm(trip, e)}>✏ Modifier</button>
-                    <button className="btn-delete" onClick={e => deleteTrip(trip.id, e)}>Supprimer</button>
+              {trips.map((trip, index) => {
+                const budgetPercent = trip.budget > 0 ? Math.min((0 / trip.budget) * 100, 100) : 0
+                const barColor = budgetPercent > 90 ? '#c07060' : budgetPercent > 70 ? '#d4af37' : '#6a9e7f'
+
+                return (
+                  <div key={trip.id} className="trip-card" onClick={() => router.push(`/trip/${trip.id}`)}>
+                    {trip.cover_image ? (
+                      <img src={trip.cover_image} alt={trip.name} className="trip-cover" />
+                    ) : (
+                      <div className="trip-cover-placeholder">🗺️</div>
+                    )}
+                    <div className="trip-body">
+                      <div className="trip-number">Voyage {String(index + 1).padStart(2, '0')}</div>
+                      <h2 className="trip-name">{trip.name}</h2>
+                      {trip.description && <p className="trip-description">{trip.description}</p>}
+                      {trip.start_date && <p className="trip-dates">{trip.start_date} → {trip.end_date}</p>}
+
+                      {trip.budget > 0 && (
+                        <div className="trip-budget-bar">
+                          <div className="budget-bar-header">
+                            <span>Budget</span>
+                            <span>{trip.budget} €</span>
+                          </div>
+                          <div className="budget-bar-track">
+                            <div className="budget-bar-fill" style={{ width: `${budgetPercent}%`, background: barColor }} />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="trip-actions">
+                        <button className="btn-edit" onClick={e => openEditForm(trip, e)}>✏ Modifier</button>
+                        <button className="btn-delete" onClick={e => deleteTrip(trip.id, e)}>Supprimer</button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

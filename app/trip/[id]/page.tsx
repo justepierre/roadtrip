@@ -13,6 +13,8 @@ interface Trip {
   description: string
   start_date: string
   end_date: string
+  budget: number
+  cover_image: string
 }
 
 interface Step {
@@ -105,6 +107,14 @@ function TripPage() {
   }
 
   const totalBudget = expenses.reduce((sum, e) => sum + e.amount, 0)
+  const budgetPercent = trip?.budget ? Math.min((totalBudget / trip.budget) * 100, 100) : 0
+  const budgetRestant = trip?.budget ? trip.budget - totalBudget : 0
+  const barColor = budgetPercent > 90 ? '#c07060' : budgetPercent > 70 ? '#d4af37' : '#6a9e7f'
+
+  const categoryTotals = expenses.reduce((acc, e) => {
+    acc[e.category] = (acc[e.category] || 0) + e.amount
+    return acc
+  }, {} as Record<string, number>)
 
   useEffect(() => { if (id) { fetchTrip(); fetchSteps() } }, [id])
   useEffect(() => { if (steps.length > 0) fetchExpenses() }, [steps])
@@ -123,15 +133,34 @@ function TripPage() {
 
         .trip-page { min-height: 100vh; }
 
+        .trip-hero {
+          position: relative;
+          height: 280px;
+          background: #1a1612;
+          overflow: hidden;
+        }
+
+        .trip-hero-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          opacity: 0.5;
+        }
+
+        .trip-hero-overlay {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%);
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          padding: 1.5rem 3rem;
+        }
+
         .navbar {
-          background: #0a0a0a;
-          padding: 1.25rem 3rem;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          position: sticky;
-          top: 0;
-          z-index: 1000;
         }
 
         .nav-logo {
@@ -144,58 +173,113 @@ function TripPage() {
         }
 
         .btn-back {
-          background: transparent;
-          border: 1px solid #3a3530;
-          color: #8a8070;
+          background: rgba(255,255,255,0.1);
+          border: 1px solid rgba(255,255,255,0.2);
+          color: #fff;
           padding: 0.5rem 1rem;
           border-radius: 4px;
           font-family: 'DM Sans', sans-serif;
           font-size: 0.8rem;
           cursor: pointer;
           transition: all 0.2s;
-          letter-spacing: 0.05em;
+          backdrop-filter: blur(10px);
         }
 
-        .btn-back:hover { border-color: #d4af37; color: #d4af37; }
+        .btn-back:hover { background: rgba(255,255,255,0.2); }
 
-        .trip-content { max-width: 1100px; margin: 0 auto; padding: 3rem; }
-
-        .trip-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          margin-bottom: 3rem;
-          padding-bottom: 2rem;
-          border-bottom: 1px solid #e8e0d0;
-        }
+        .trip-hero-content { }
 
         .trip-title {
           font-family: 'Playfair Display', serif;
           font-size: 2.75rem;
-          color: #1a1612;
+          color: #fff;
           line-height: 1.1;
-          margin-bottom: 0.5rem;
+          margin-bottom: 0.4rem;
         }
 
-        .trip-desc { font-size: 0.9rem; color: #8a8070; }
+        .trip-desc { font-size: 0.9rem; color: rgba(255,255,255,0.7); }
 
-        .budget-badge {
-          background: #0a0a0a;
-          color: #d4af37;
+        .trip-content { max-width: 1100px; margin: 0 auto; padding: 2rem 3rem; }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 1rem;
+          margin-bottom: 2rem;
+        }
+
+        .stat-card {
+          background: #fff;
+          border: 1px solid #e8e0d0;
           border-radius: 8px;
-          padding: 1.25rem 1.75rem;
-          text-align: right;
-          min-width: 160px;
+          padding: 1.25rem;
         }
 
-        .budget-label { font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: #8a8070; margin-bottom: 0.25rem; }
-        .budget-amount { font-family: 'Playfair Display', serif; font-size: 2rem; color: #d4af37; }
+        .stat-label { font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: #8a8070; margin-bottom: 0.4rem; }
+        .stat-value { font-family: 'Playfair Display', serif; font-size: 1.75rem; color: #1a1612; }
+        .stat-value.gold { color: #d4af37; }
+        .stat-value.green { color: #6a9e7f; }
+        .stat-value.red { color: #c07060; }
+
+        .budget-section {
+          background: #fff;
+          border: 1px solid #e8e0d0;
+          border-radius: 8px;
+          padding: 1.5rem;
+          margin-bottom: 2rem;
+        }
+
+        .budget-section-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; margin-bottom: 1.25rem; }
+
+        .budget-bar-track {
+          height: 8px;
+          background: #f0ebe0;
+          border-radius: 4px;
+          overflow: hidden;
+          margin-bottom: 0.75rem;
+        }
+
+        .budget-bar-fill {
+          height: 100%;
+          border-radius: 4px;
+          transition: width 0.5s ease;
+        }
+
+        .budget-bar-labels {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.8rem;
+          color: #8a8070;
+        }
+
+        .category-grid {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 0.75rem;
+          margin-top: 1.25rem;
+          padding-top: 1.25rem;
+          border-top: 1px solid #f0ebe0;
+        }
+
+        .category-item { text-align: center; }
+        .category-emoji { font-size: 1.25rem; margin-bottom: 0.25rem; }
+        .category-name { font-size: 0.7rem; color: #8a8070; margin-bottom: 0.2rem; text-transform: capitalize; }
+        .category-amount { font-size: 0.85rem; font-weight: 500; color: #1a1612; }
+
+        .section-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 1.25rem;
+        }
+
+        .section-title { font-family: 'Playfair Display', serif; font-size: 1.5rem; }
 
         .btn-primary {
           background: #0a0a0a;
           color: #f5f0e8;
           border: none;
-          padding: 0.85rem 1.75rem;
+          padding: 0.75rem 1.5rem;
           border-radius: 4px;
           font-family: 'DM Sans', sans-serif;
           font-size: 0.85rem;
@@ -203,7 +287,6 @@ function TripPage() {
           cursor: pointer;
           transition: all 0.2s;
           letter-spacing: 0.05em;
-          margin-top: 1rem;
         }
 
         .btn-primary:hover { background: #d4af37; color: #0a0a0a; }
@@ -212,14 +295,8 @@ function TripPage() {
           background: #fff;
           border: 1px solid #e8e0d0;
           border-radius: 8px;
-          padding: 2rem;
-          margin-bottom: 2rem;
-        }
-
-        .form-title {
-          font-family: 'Playfair Display', serif;
-          font-size: 1.35rem;
-          margin-bottom: 1.25rem;
+          padding: 1.5rem;
+          margin-bottom: 1.5rem;
         }
 
         .form-input {
@@ -227,7 +304,7 @@ function TripPage() {
           background: #f7f4ef;
           border: 1px solid #e8e0d0;
           border-radius: 4px;
-          padding: 0.85rem 1rem;
+          padding: 0.75rem 1rem;
           font-family: 'DM Sans', sans-serif;
           font-size: 0.9rem;
           color: #1a1612;
@@ -257,7 +334,7 @@ function TripPage() {
 
         .btn-secondary:hover { border-color: #1a1612; color: #1a1612; }
 
-        .map-section { margin-bottom: 2.5rem; border-radius: 12px; overflow: hidden; border: 1px solid #e8e0d0; }
+        .map-section { margin-bottom: 2rem; border-radius: 12px; overflow: hidden; border: 1px solid #e8e0d0; }
 
         .steps-list { display: flex; flex-direction: column; gap: 1rem; }
 
@@ -293,19 +370,9 @@ function TripPage() {
           flex-shrink: 0;
         }
 
-        .step-name {
-          font-family: 'Playfair Display', serif;
-          font-size: 1.15rem;
-          color: #1a1612;
-        }
-
+        .step-name { font-family: 'Playfair Display', serif; font-size: 1.15rem; color: #1a1612; }
         .step-right { display: flex; align-items: center; gap: 1rem; }
-
-        .step-total {
-          font-size: 0.9rem;
-          font-weight: 500;
-          color: #d4af37;
-        }
+        .step-total { font-size: 0.9rem; font-weight: 500; color: #d4af37; }
 
         .btn-add-expense {
           background: #f7f4ef;
@@ -402,31 +469,79 @@ function TripPage() {
       `}</style>
 
       <div className="trip-page">
-        <nav className="navbar">
-          <div className="nav-logo" onClick={() => router.push('/dashboard')}>Roadtrip</div>
-          <button className="btn-back" onClick={() => router.push('/dashboard')}>← Mes voyages</button>
-        </nav>
-
-        <div className="trip-content">
-          {trip && (
-            <>
-              <div className="trip-header">
-                <div>
+        {trip && (
+          <>
+            <div className="trip-hero">
+              {trip.cover_image && <img src={trip.cover_image} alt={trip.name} className="trip-hero-img" />}
+              <div className="trip-hero-overlay">
+                <nav className="navbar">
+                  <div className="nav-logo" onClick={() => router.push('/dashboard')}>Roadtrip</div>
+                  <button className="btn-back" onClick={() => router.push('/dashboard')}>← Mes voyages</button>
+                </nav>
+                <div className="trip-hero-content">
                   <h1 className="trip-title">{trip.name}</h1>
                   {trip.description && <p className="trip-desc">{trip.description}</p>}
-                  <button className="btn-primary" onClick={() => setShowStepForm(!showStepForm)}>
-                    + Ajouter une étape
-                  </button>
                 </div>
-                <div className="budget-badge">
-                  <div className="budget-label">Budget total</div>
-                  <div className="budget-amount">{totalBudget.toFixed(0)} €</div>
+              </div>
+            </div>
+
+            <div className="trip-content">
+              <div className="stats-grid">
+                <div className="stat-card">
+                  <div className="stat-label">Étapes</div>
+                  <div className="stat-value">{steps.length}</div>
                 </div>
+                <div className="stat-card">
+                  <div className="stat-label">Dépensé</div>
+                  <div className="stat-value gold">{totalBudget.toFixed(0)} €</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-label">Budget restant</div>
+                  <div className={`stat-value ${budgetRestant < 0 ? 'red' : 'green'}`}>
+                    {trip.budget > 0 ? `${budgetRestant.toFixed(0)} €` : '—'}
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-label">Budget prévu</div>
+                  <div className="stat-value">{trip.budget > 0 ? `${trip.budget} €` : '—'}</div>
+                </div>
+              </div>
+
+              {trip.budget > 0 && (
+                <div className="budget-section">
+                  <div className="budget-section-title">Suivi du budget</div>
+                  <div className="budget-bar-track">
+                    <div className="budget-bar-fill" style={{ width: `${budgetPercent}%`, background: barColor }} />
+                  </div>
+                  <div className="budget-bar-labels">
+                    <span>{totalBudget.toFixed(0)} € dépensés</span>
+                    <span>{budgetPercent.toFixed(0)}% du budget</span>
+                    <span>{trip.budget} € prévu</span>
+                  </div>
+
+                  {Object.keys(categoryTotals).length > 0 && (
+                    <div className="category-grid">
+                      {Object.entries(categoryTotals).map(([cat, amount]) => (
+                        <div key={cat} className="category-item">
+                          <div className="category-emoji">{categoryEmoji[cat] || '💼'}</div>
+                          <div className="category-name">{cat}</div>
+                          <div className="category-amount">{amount.toFixed(0)} €</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="section-header">
+                <h2 className="section-title">Itinéraire</h2>
+                <button className="btn-primary" onClick={() => setShowStepForm(!showStepForm)}>
+                  + Ajouter une étape
+                </button>
               </div>
 
               {showStepForm && (
                 <div className="form-card">
-                  <h2 className="form-title">Nouvelle étape</h2>
                   <input
                     className="form-input"
                     type="text"
@@ -528,9 +643,9 @@ function TripPage() {
                   })}
                 </div>
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </>
   )
