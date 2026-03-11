@@ -34,6 +34,7 @@ export default function Dashboard() {
   const [budget, setBudget] = useState('')
   const [userEmail, setUserEmail] = useState('')
   const [stats, setStats] = useState<GlobalStats>({ totalSteps: 0, totalBudget: 0, totalSpent: 0 })
+  const [tripExpenses, setTripExpenses] = useState<Record<string, number>>({})
 
   const fetchTrips = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -50,7 +51,6 @@ export default function Dashboard() {
     setTrips(tripList)
     setLoading(false)
 
-    // Stats globales
     const totalBudget = tripList.reduce((sum, t) => sum + (t.budget || 0), 0)
 
     if (tripList.length > 0) {
@@ -58,24 +58,36 @@ export default function Dashboard() {
 
       const { data: stepsData } = await supabase
         .from('steps')
-        .select('id')
+        .select('id, trip_id')
         .in('trip_id', tripIds)
 
       const totalSteps = stepsData?.length || 0
       const stepIds = stepsData?.map(s => s.id) || []
 
       let totalSpent = 0
+      const expensesByTrip: Record<string, number> = {}
+
       if (stepIds.length > 0) {
         const { data: expensesData } = await supabase
           .from('expenses')
-          .select('amount')
+          .select('amount, step_id')
           .in('step_id', stepIds)
-        totalSpent = expensesData?.reduce((sum, e) => sum + e.amount, 0) || 0
+
+        const stepToTrip: Record<string, string> = {}
+        stepsData?.forEach(s => { stepToTrip[s.id] = s.trip_id })
+
+        expensesData?.forEach(e => {
+          totalSpent += e.amount
+          const tripId = stepToTrip[e.step_id]
+          if (tripId) expensesByTrip[tripId] = (expensesByTrip[tripId] || 0) + e.amount
+        })
       }
 
       setStats({ totalSteps, totalBudget, totalSpent })
+      setTripExpenses(expensesByTrip)
     } else {
       setStats({ totalSteps: 0, totalBudget, totalSpent: 0 })
+      setTripExpenses({})
     }
   }
 
@@ -299,11 +311,7 @@ export default function Dashboard() {
 
         .stat-card-value.gold { color: #d4af37; }
         .stat-card-value.green { color: #6a9e7f; }
-
-        .stat-card-sub {
-          font-size: 0.75rem;
-          color: #b0a090;
-        }
+        .stat-card-sub { font-size: 0.75rem; color: #b0a090; }
 
         .btn-primary {
           background: #0a0a0a;
@@ -381,13 +389,7 @@ export default function Dashboard() {
 
         .trip-card:hover { transform: translateY(-4px); box-shadow: 0 16px 50px rgba(0,0,0,0.1); }
 
-        .trip-cover {
-          width: 100%;
-          height: 180px;
-          object-fit: cover;
-          display: block;
-          background: #e8e0d0;
-        }
+        .trip-cover { width: 100%; height: 180px; object-fit: cover; display: block; background: #e8e0d0; }
 
         .trip-cover-placeholder {
           width: 100%;
@@ -544,7 +546,8 @@ export default function Dashboard() {
           ) : (
             <div className="trips-grid">
               {trips.map((trip, index) => {
-                const budgetPercent = trip.budget > 0 ? Math.min((0 / trip.budget) * 100, 100) : 0
+                const spent = tripExpenses[trip.id] || 0
+                const budgetPercent = trip.budget > 0 ? Math.min((spent / trip.budget) * 100, 100) : 0
                 const barColor = budgetPercent > 90 ? '#c07060' : budgetPercent > 70 ? '#d4af37' : '#6a9e7f'
 
                 return (
@@ -563,7 +566,7 @@ export default function Dashboard() {
                       {trip.budget > 0 && (
                         <div className="trip-budget-bar">
                           <div className="budget-bar-header">
-                            <span>Budget</span>
+                            <span>{spent > 0 ? `${spent.toFixed(0)} € dépensés` : 'Budget'}</span>
                             <span>{trip.budget} €</span>
                           </div>
                           <div className="budget-bar-track">

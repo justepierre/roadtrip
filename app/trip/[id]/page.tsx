@@ -164,6 +164,7 @@ function TripPage() {
   const [activeStepId, setActiveStepId] = useState<string | null>(null)
   const [editingStepId, setEditingStepId] = useState<string | null>(null)
   const [editingStepName, setEditingStepName] = useState('')
+  const [editingTransportMode, setEditingTransportMode] = useState('driving')
   const [expenseLabel, setExpenseLabel] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseCategory, setExpenseCategory] = useState('transport')
@@ -194,57 +195,33 @@ function TripPage() {
     const geo = await res.json()
     if (!geo || geo.length === 0) { alert('Ville introuvable'); setAddingStep(false); return }
 
-    let transitLat = null
-    let transitLng = null
-    let transitName = null
-    let transitDepartureLat = null
-    let transitDepartureLng = null
-    let transitDepartureName = null
+    let transitLat = null, transitLng = null, transitName = null
+    let transitDepartureLat = null, transitDepartureLng = null, transitDepartureName = null
 
     if (transportMode === 'plane') {
       transitDepartureLat = CDG.lat
       transitDepartureLng = CDG.lng
       transitDepartureName = CDG.name
-
       const arrAirport = await findNearestAirport(stepName)
-      if (arrAirport) {
-        transitLat = arrAirport.lat
-        transitLng = arrAirport.lng
-        transitName = arrAirport.name
-      }
+      if (arrAirport) { transitLat = arrAirport.lat; transitLng = arrAirport.lng; transitName = arrAirport.name }
     }
 
     if (transportMode === 'ferry') {
       const arrTerminal = await findNearestFerryTerminal(stepName)
-      if (arrTerminal) {
-        transitLat = arrTerminal.lat
-        transitLng = arrTerminal.lng
-        transitName = arrTerminal.name
-      }
+      if (arrTerminal) { transitLat = arrTerminal.lat; transitLng = arrTerminal.lng; transitName = arrTerminal.name }
       if (steps.length > 0) {
         const prevStep = steps[steps.length - 1]
         const depTerminal = await findNearestFerryTerminal(prevStep.name)
-        if (depTerminal) {
-          transitDepartureLat = depTerminal.lat
-          transitDepartureLng = depTerminal.lng
-          transitDepartureName = depTerminal.name
-        }
+        if (depTerminal) { transitDepartureLat = depTerminal.lat; transitDepartureLng = depTerminal.lng; transitDepartureName = depTerminal.name }
       }
     }
 
     await supabase.from('steps').insert({
-      trip_id: id,
-      name: stepName,
-      latitude: parseFloat(geo[0].lat),
-      longitude: parseFloat(geo[0].lon),
-      order_index: steps.length,
-      transport_mode: transportMode,
-      transit_lat: transitLat,
-      transit_lng: transitLng,
-      transit_name: transitName,
-      transit_departure_lat: transitDepartureLat,
-      transit_departure_lng: transitDepartureLng,
-      transit_departure_name: transitDepartureName,
+      trip_id: id, name: stepName,
+      latitude: parseFloat(geo[0].lat), longitude: parseFloat(geo[0].lon),
+      order_index: steps.length, transport_mode: transportMode,
+      transit_lat: transitLat, transit_lng: transitLng, transit_name: transitName,
+      transit_departure_lat: transitDepartureLat, transit_departure_lng: transitDepartureLng, transit_departure_name: transitDepartureName,
     })
 
     setStepName('')
@@ -255,21 +232,52 @@ function TripPage() {
   }
 
   const updateStep = async (stepId: string) => {
-    if (!editingStepName) return
+    if (!editingStepName || addingStep) return
+    setAddingStep(true)
+
     const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(editingStepName)}&format=json&limit=1`)
     const geo = await res.json()
-    if (!geo || geo.length === 0) { alert('Ville introuvable'); return }
+    if (!geo || geo.length === 0) { alert('Ville introuvable'); setAddingStep(false); return }
+
+    let transitLat = null, transitLng = null, transitName = null
+    let transitDepartureLat = null, transitDepartureLng = null, transitDepartureName = null
+
+    if (editingTransportMode === 'plane') {
+      transitDepartureLat = CDG.lat
+      transitDepartureLng = CDG.lng
+      transitDepartureName = CDG.name
+      const arrAirport = await findNearestAirport(editingStepName)
+      if (arrAirport) { transitLat = arrAirport.lat; transitLng = arrAirport.lng; transitName = arrAirport.name }
+    }
+
+    if (editingTransportMode === 'ferry') {
+      const arrTerminal = await findNearestFerryTerminal(editingStepName)
+      if (arrTerminal) { transitLat = arrTerminal.lat; transitLng = arrTerminal.lng; transitName = arrTerminal.name }
+      const stepIndex = steps.findIndex(s => s.id === stepId)
+      if (stepIndex > 0) {
+        const prevStep = steps[stepIndex - 1]
+        const depTerminal = await findNearestFerryTerminal(prevStep.name)
+        if (depTerminal) { transitDepartureLat = depTerminal.lat; transitDepartureLng = depTerminal.lng; transitDepartureName = depTerminal.name }
+      }
+    }
+
     await supabase.from('steps').update({
       name: editingStepName,
-      latitude: parseFloat(geo[0].lat),
-      longitude: parseFloat(geo[0].lon),
+      latitude: parseFloat(geo[0].lat), longitude: parseFloat(geo[0].lon),
+      transport_mode: editingTransportMode,
+      transit_lat: transitLat, transit_lng: transitLng, transit_name: transitName,
+      transit_departure_lat: transitDepartureLat, transit_departure_lng: transitDepartureLng, transit_departure_name: transitDepartureName,
     }).eq('id', stepId)
+
     setEditingStepId(null)
     setEditingStepName('')
+    setEditingTransportMode('driving')
+    setAddingStep(false)
     fetchSteps()
   }
 
   const deleteStep = async (stepId: string) => {
+    if (!confirm('Supprimer cette étape ? Les dépenses associées seront aussi supprimées.')) return
     await supabase.from('steps').delete().eq('id', stepId)
     fetchSteps()
   }
@@ -564,15 +572,12 @@ function TripPage() {
                           key={mode.value}
                           onClick={() => setTransportMode(mode.value)}
                           style={{
-                            padding: '0.6rem 1.25rem',
-                            borderRadius: '4px',
+                            padding: '0.6rem 1.25rem', borderRadius: '4px',
                             border: `1px solid ${transportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`,
                             background: transportMode === mode.value ? '#0a0a0a' : '#f7f4ef',
                             color: transportMode === mode.value ? '#d4af37' : '#8a8070',
-                            fontFamily: 'DM Sans, sans-serif',
-                            fontSize: '0.85rem',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
+                            fontFamily: 'DM Sans, sans-serif', fontSize: '0.85rem',
+                            cursor: 'pointer', transition: 'all 0.2s',
                           }}
                         >
                           {mode.label}
@@ -580,7 +585,7 @@ function TripPage() {
                       ))}
                     </div>
                   </div>
-                  {addingStep && <p className="loading-indicator">🔍 Recherche de l'aéroport le plus proche...</p>}
+                  {addingStep && <p className="loading-indicator">🔍 Recherche en cours...</p>}
                   <div className="form-actions">
                     <button className="btn-primary" onClick={addStep} disabled={addingStep}>
                       {addingStep ? 'Recherche...' : 'Ajouter'}
@@ -634,6 +639,7 @@ function TripPage() {
                             <button className="btn-add-expense" onClick={() => {
                               setEditingStepId(step.id)
                               setEditingStepName(step.name)
+                              setEditingTransportMode(step.transport_mode || 'driving')
                             }}>
                               ✏ Modifier
                             </button>
@@ -649,10 +655,37 @@ function TripPage() {
                               placeholder="Nouveau nom de ville..."
                               value={editingStepName}
                               onChange={e => setEditingStepName(e.target.value)}
-                              onKeyDown={e => e.key === 'Enter' && updateStep(step.id)}
                             />
+                            <div className="transport-selector" style={{ marginBottom: '0.75rem' }}>
+                              <label className="transport-label">Mode de transport</label>
+                              <div className="transport-options">
+                                {[
+                                  { value: 'driving', label: '🚗 Route' },
+                                  { value: 'plane', label: '✈️ Avion' },
+                                  { value: 'ferry', label: '⛴️ Ferry' },
+                                ].map(mode => (
+                                  <button
+                                    key={mode.value}
+                                    onClick={() => setEditingTransportMode(mode.value)}
+                                    style={{
+                                      padding: '0.4rem 0.85rem', borderRadius: '4px',
+                                      border: `1px solid ${editingTransportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`,
+                                      background: editingTransportMode === mode.value ? '#0a0a0a' : '#fff',
+                                      color: editingTransportMode === mode.value ? '#d4af37' : '#8a8070',
+                                      fontFamily: 'DM Sans, sans-serif', fontSize: '0.75rem',
+                                      cursor: 'pointer', transition: 'all 0.2s',
+                                    }}
+                                  >
+                                    {mode.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {addingStep && <p style={{ fontSize: '0.8rem', color: '#8a8070', fontStyle: 'italic', marginBottom: '0.5rem' }}>🔍 Recherche en cours...</p>}
                             <div className="form-actions">
-                              <button className="btn-primary" onClick={() => updateStep(step.id)}>Enregistrer</button>
+                              <button className="btn-primary" onClick={() => updateStep(step.id)} disabled={addingStep}>
+                                {addingStep ? 'Recherche...' : 'Enregistrer'}
+                              </button>
                               <button className="btn-secondary" onClick={() => setEditingStepId(null)}>Annuler</button>
                             </div>
                           </div>
