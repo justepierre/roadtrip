@@ -35,7 +35,9 @@ export default function Dashboard() {
   const [userEmail, setUserEmail] = useState('')
   const [stats, setStats] = useState<GlobalStats>({ totalSteps: 0, totalBudget: 0, totalSpent: 0 })
   const [tripExpenses, setTripExpenses] = useState<Record<string, number>>({})
-
+  const [pickMode, setPickMode] = useState(false)
+  const [pickedCoords, setPickedCoords] = useState<{ lat: number, lng: number } | null>(null)
+  
   const fetchTrips = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return

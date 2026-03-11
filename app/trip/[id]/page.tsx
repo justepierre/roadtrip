@@ -116,14 +116,8 @@ async function findNearestAirport(cityName: string): Promise<{ lat: number, lng:
   let minDist = Infinity
 
   for (const airport of MAJOR_AIRPORTS) {
-    const dist = Math.sqrt(
-      Math.pow(airport.lat - cityLat, 2) +
-      Math.pow(airport.lng - cityLng, 2)
-    )
-    if (dist < minDist) {
-      minDist = dist
-      nearest = airport
-    }
+    const dist = Math.sqrt(Math.pow(airport.lat - cityLat, 2) + Math.pow(airport.lng - cityLng, 2))
+    if (dist < minDist) { minDist = dist; nearest = airport }
   }
 
   return nearest
@@ -168,6 +162,8 @@ function TripPage() {
   const [expenseLabel, setExpenseLabel] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseCategory, setExpenseCategory] = useState('transport')
+  const [pickMode, setPickMode] = useState(false)
+  const [pickedCoords, setPickedCoords] = useState<{ lat: number, lng: number } | null>(null)
 
   const fetchTrip = async () => {
     const { data } = await supabase.from('trips').select('*').eq('id', id).single()
@@ -191,9 +187,19 @@ function TripPage() {
     if (!stepName || addingStep) return
     setAddingStep(true)
 
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(stepName)}&format=json&limit=1`)
-    const geo = await res.json()
-    if (!geo || geo.length === 0) { alert('Ville introuvable'); setAddingStep(false); return }
+    let finalLat: number
+    let finalLng: number
+
+    if (pickedCoords) {
+      finalLat = pickedCoords.lat
+      finalLng = pickedCoords.lng
+    } else {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(stepName)}&format=json&limit=1`)
+      const geo = await res.json()
+      if (!geo || geo.length === 0) { alert('Ville introuvable'); setAddingStep(false); return }
+      finalLat = parseFloat(geo[0].lat)
+      finalLng = parseFloat(geo[0].lon)
+    }
 
     let transitLat = null, transitLng = null, transitName = null
     let transitDepartureLat = null, transitDepartureLng = null, transitDepartureName = null
@@ -218,7 +224,7 @@ function TripPage() {
 
     await supabase.from('steps').insert({
       trip_id: id, name: stepName,
-      latitude: parseFloat(geo[0].lat), longitude: parseFloat(geo[0].lon),
+      latitude: finalLat, longitude: finalLng,
       order_index: steps.length, transport_mode: transportMode,
       transit_lat: transitLat, transit_lng: transitLng, transit_name: transitName,
       transit_departure_lat: transitDepartureLat, transit_departure_lng: transitDepartureLng, transit_departure_name: transitDepartureName,
@@ -228,6 +234,8 @@ function TripPage() {
     setTransportMode('driving')
     setShowStepForm(false)
     setAddingStep(false)
+    setPickedCoords(null)
+    setPickMode(false)
     fetchSteps()
   }
 
@@ -545,9 +553,23 @@ function TripPage() {
 
               <div className="section-header">
                 <h2 className="section-title">Itinéraire</h2>
-                <button className="btn-primary" onClick={() => setShowStepForm(!showStepForm)}>
+                <button className="btn-primary" onClick={() => { setShowStepForm(!showStepForm); setPickMode(false); setPickedCoords(null) }}>
                   + Ajouter une étape
                 </button>
+              </div>
+
+              {/* Carte toujours visible, avec pickMode si le formulaire est ouvert */}
+              <div className="map-section">
+                <Map
+                  steps={steps}
+                  pickMode={pickMode}
+                  onPick={(lat, lng, name) => {
+                    setStepName(name)
+                    setPickedCoords({ lat, lng })
+                    setPickMode(false)
+                    setShowStepForm(true)
+                  }}
+                />
               </div>
 
               {showStepForm && (
@@ -557,9 +579,28 @@ function TripPage() {
                     type="text"
                     placeholder="Nom de la ville (ex: Paris, New York...)"
                     value={stepName}
-                    onChange={e => setStepName(e.target.value)}
+                    onChange={e => { setStepName(e.target.value); setPickedCoords(null) }}
                     onKeyDown={e => e.key === 'Enter' && addStep()}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setPickMode(p => !p)}
+                    style={{
+                      width: '100%', padding: '0.75rem', marginBottom: '0.75rem',
+                      background: pickMode ? '#d4af37' : '#f7f4ef',
+                      color: pickMode ? '#0a0a0a' : '#8a8070',
+                      border: `1px solid ${pickMode ? '#d4af37' : '#e8e0d0'}`,
+                      borderRadius: '4px', fontFamily: 'DM Sans, sans-serif',
+                      fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s',
+                    }}
+                  >
+                    {pickMode ? '✓ Mode placement activé — cliquez sur la carte ci-dessus' : '📍 Ou placer sur la carte'}
+                  </button>
+                  {pickedCoords && (
+                    <div style={{ fontSize: '0.8rem', color: '#6a9e7f', marginBottom: '0.75rem', fontStyle: 'italic' }}>
+                      ✓ Point placé : {stepName} ({pickedCoords.lat.toFixed(4)}, {pickedCoords.lng.toFixed(4)})
+                    </div>
+                  )}
                   <div className="transport-selector">
                     <label className="transport-label">Mode de transport pour rejoindre cette étape</label>
                     <div className="transport-options">
@@ -590,14 +631,8 @@ function TripPage() {
                     <button className="btn-primary" onClick={addStep} disabled={addingStep}>
                       {addingStep ? 'Recherche...' : 'Ajouter'}
                     </button>
-                    <button className="btn-secondary" onClick={() => setShowStepForm(false)}>Annuler</button>
+                    <button className="btn-secondary" onClick={() => { setShowStepForm(false); setPickMode(false); setPickedCoords(null) }}>Annuler</button>
                   </div>
-                </div>
-              )}
-
-              {steps.length > 0 && (
-                <div className="map-section">
-                  <Map steps={steps} />
                 </div>
               )}
 
