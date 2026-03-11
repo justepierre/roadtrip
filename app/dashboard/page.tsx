@@ -123,7 +123,50 @@ export default function Dashboard() {
   }
 
   useEffect(() => { fetchTrips() }, [])
+useEffect(() => {
+  const preset = localStorage.getItem('preset_trip')
+  if (!preset) return
+  localStorage.removeItem('preset_trip')
 
+  const createPresetTrip = async () => {
+    const trip = JSON.parse(preset)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const cover_image = await fetchCoverImage(trip.name)
+
+    const { data: newTrip } = await supabase.from('trips').insert({
+      user_id: user.id,
+      name: trip.name,
+      description: trip.description,
+      budget: trip.budget,
+      cover_image,
+    }).select().single()
+
+    if (!newTrip) return
+
+    for (let i = 0; i < trip.steps.length; i++) {
+      const stepName = trip.steps[i]
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(stepName)}&format=json&limit=1`)
+      const geo = await res.json()
+      if (!geo.length) continue
+
+      await supabase.from('steps').insert({
+        trip_id: newTrip.id,
+        name: stepName,
+        latitude: parseFloat(geo[0].lat),
+        longitude: parseFloat(geo[0].lon),
+        order_index: i,
+        transport_mode: 'driving',
+      })
+    }
+
+    fetchTrips()
+    router.push(`/trip/${newTrip.id}`)
+  }
+
+  createPresetTrip()
+}, [])
   return (
     <>
       <style>{`

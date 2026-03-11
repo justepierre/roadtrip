@@ -2,13 +2,38 @@
 
 import { supabase } from '@/lib/supabase'
 
+const PRESET_TRIPS = [
+  {
+    name: 'Route des Alpes',
+    description: 'Un road trip épique à travers les plus beaux cols alpins',
+    budget: 2340,
+    steps: ['Grenoble', 'Chamonix', 'Annecy', 'Val d\'Isère', 'Briançon', 'Gap', 'Sisteron', 'Nice'],
+    meta: '8 étapes · 14 jours',
+  },
+  {
+    name: 'Côte Atlantique',
+    description: 'De la Loire-Atlantique aux plages des Landes',
+    budget: 1180,
+    steps: ['Nantes', 'La Rochelle', 'Royan', 'Bordeaux', 'Arcachon'],
+    meta: '5 étapes · 7 jours',
+  },
+  {
+    name: 'Tour de Bretagne',
+    description: 'À la découverte des côtes et des landes bretonnes',
+    budget: 890,
+    steps: ['Rennes', 'Saint-Malo', 'Brest', 'Quimper', 'Vannes', 'Nantes'],
+    meta: '6 étapes · 10 jours',
+  },
+]
+
 export default function Home() {
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (presetIndex?: number) => {
+    if (presetIndex !== undefined) {
+      localStorage.setItem('preset_trip', JSON.stringify(PRESET_TRIPS[presetIndex]))
+    }
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/dashboard`
-      }
+      options: { redirectTo: `${window.location.origin}/dashboard` }
     })
   }
 
@@ -86,10 +111,7 @@ export default function Home() {
           margin-bottom: 2rem;
         }
 
-        .hero-title em {
-          font-style: italic;
-          color: #d4af37;
-        }
+        .hero-title em { font-style: italic; color: #d4af37; }
 
         .hero-subtitle {
           font-size: 1rem;
@@ -99,11 +121,7 @@ export default function Home() {
           line-height: 1.7;
         }
 
-        .login-actions {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
+        .login-actions { display: flex; flex-direction: column; gap: 1rem; }
 
         .btn-google {
           display: flex;
@@ -128,17 +146,9 @@ export default function Home() {
           box-shadow: 0 8px 30px rgba(212, 175, 55, 0.3);
         }
 
-        .footer-text {
-          font-size: 0.75rem;
-          color: #3a3530;
-          letter-spacing: 0.05em;
-        }
+        .footer-text { font-size: 0.75rem; color: #3a3530; letter-spacing: 0.05em; }
 
-        .login-right {
-          position: relative;
-          background: #111;
-          overflow: hidden;
-        }
+        .login-right { position: relative; background: #111; overflow: hidden; }
 
         .grid-overlay {
           position: absolute;
@@ -167,26 +177,22 @@ export default function Home() {
           padding: 1.25rem 1.75rem;
           width: 280px;
           backdrop-filter: blur(10px);
-          animation: float 6s ease-in-out infinite;
+          cursor: pointer;
+          transition: all 0.25s;
         }
 
-        .dest-card:nth-child(2) { animation-delay: -2s; transform: translateX(40px); }
-        .dest-card:nth-child(3) { animation-delay: -4s; transform: translateX(-20px); }
-
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-10px); }
+        .dest-card:hover {
+          background: rgba(212, 175, 55, 0.1);
+          border-color: rgba(212, 175, 55, 0.5);
+          transform: translateY(-4px) !important;
+          box-shadow: 0 12px 40px rgba(212, 175, 55, 0.15);
         }
 
-        .dest-card:nth-child(2) {
-          animation: float2 6s ease-in-out infinite;
-          animation-delay: -2s;
-        }
+        .dest-card:nth-child(2) { transform: translateX(40px); }
+        .dest-card:nth-child(3) { transform: translateX(-20px); }
 
-        @keyframes float2 {
-          0%, 100% { transform: translateX(40px) translateY(0px); }
-          50% { transform: translateX(40px) translateY(-10px); }
-        }
+        .dest-card:nth-child(2):hover { transform: translateX(40px) translateY(-4px) !important; }
+        .dest-card:nth-child(3):hover { transform: translateX(-20px) translateY(-4px) !important; }
 
         .dest-name {
           font-family: 'Playfair Display', serif;
@@ -195,18 +201,26 @@ export default function Home() {
           margin-bottom: 0.25rem;
         }
 
-        .dest-meta {
+        .dest-meta { font-size: 0.75rem; color: #8a8070; letter-spacing: 0.05em; }
+        .dest-budget { margin-top: 0.75rem; font-size: 0.85rem; color: #d4af37; font-weight: 500; }
+
+        .dest-steps {
+          margin-top: 0.6rem;
+          font-size: 0.72rem;
+          color: #5a5248;
+          line-height: 1.5;
+        }
+
+        .dest-cta {
+          margin-top: 0.75rem;
           font-size: 0.75rem;
-          color: #8a8070;
+          color: #d4af37;
+          opacity: 0;
+          transition: opacity 0.2s;
           letter-spacing: 0.05em;
         }
 
-        .dest-budget {
-          margin-top: 0.75rem;
-          font-size: 0.85rem;
-          color: #d4af37;
-          font-weight: 500;
-        }
+        .dest-card:hover .dest-cta { opacity: 1; }
 
         @media (max-width: 768px) {
           .login-page { grid-template-columns: 1fr; }
@@ -232,7 +246,7 @@ export default function Home() {
           </div>
 
           <div className="login-actions">
-            <button className="btn-google" onClick={handleGoogleLogin}>
+            <button className="btn-google" onClick={() => handleGoogleLogin()}>
               <img src="https://www.google.com/favicon.ico" alt="Google" width={16} height={16} />
               Continuer avec Google
             </button>
@@ -243,21 +257,15 @@ export default function Home() {
         <div className="login-right">
           <div className="grid-overlay" />
           <div className="destination-cards">
-            <div className="dest-card">
-              <div className="dest-name">Route des Alpes</div>
-              <div className="dest-meta">8 étapes · 14 jours</div>
-              <div className="dest-budget">2 340 €</div>
-            </div>
-            <div className="dest-card">
-              <div className="dest-name">Côte Atlantique</div>
-              <div className="dest-meta">5 étapes · 7 jours</div>
-              <div className="dest-budget">1 180 €</div>
-            </div>
-            <div className="dest-card">
-              <div className="dest-name">Tour de Bretagne</div>
-              <div className="dest-meta">6 étapes · 10 jours</div>
-              <div className="dest-budget">890 €</div>
-            </div>
+            {PRESET_TRIPS.map((trip, index) => (
+              <div key={index} className="dest-card" onClick={() => handleGoogleLogin(index)}>
+                <div className="dest-name">{trip.name}</div>
+                <div className="dest-meta">{trip.meta}</div>
+                <div className="dest-steps">{trip.steps.join(' → ')}</div>
+                <div className="dest-budget">{trip.budget.toLocaleString()} €</div>
+                <div className="dest-cta">✦ Cliquer pour démarrer ce voyage</div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
