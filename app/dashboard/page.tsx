@@ -14,6 +14,12 @@ interface Trip {
   cover_image: string
 }
 
+interface GlobalStats {
+  totalSteps: number
+  totalBudget: number
+  totalSpent: number
+}
+
 export default function Dashboard() {
   const router = useRouter()
   const [trips, setTrips] = useState<Trip[]>([])
@@ -27,6 +33,7 @@ export default function Dashboard() {
   const [endDate, setEndDate] = useState('')
   const [budget, setBudget] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const [stats, setStats] = useState<GlobalStats>({ totalSteps: 0, totalBudget: 0, totalSpent: 0 })
 
   const fetchTrips = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -39,8 +46,37 @@ export default function Dashboard() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    setTrips(data || [])
+    const tripList = data || []
+    setTrips(tripList)
     setLoading(false)
+
+    // Stats globales
+    const totalBudget = tripList.reduce((sum, t) => sum + (t.budget || 0), 0)
+
+    if (tripList.length > 0) {
+      const tripIds = tripList.map(t => t.id)
+
+      const { data: stepsData } = await supabase
+        .from('steps')
+        .select('id')
+        .in('trip_id', tripIds)
+
+      const totalSteps = stepsData?.length || 0
+      const stepIds = stepsData?.map(s => s.id) || []
+
+      let totalSpent = 0
+      if (stepIds.length > 0) {
+        const { data: expensesData } = await supabase
+          .from('expenses')
+          .select('amount')
+          .in('step_id', stepIds)
+        totalSpent = expensesData?.reduce((sum, e) => sum + e.amount, 0) || 0
+      }
+
+      setStats({ totalSteps, totalBudget, totalSpent })
+    } else {
+      setStats({ totalSteps: 0, totalBudget, totalSpent: 0 })
+    }
   }
 
   const fetchCoverImage = async (query: string): Promise<string> => {
@@ -123,50 +159,52 @@ export default function Dashboard() {
   }
 
   useEffect(() => { fetchTrips() }, [])
-useEffect(() => {
-  const preset = localStorage.getItem('preset_trip')
-  if (!preset) return
-  localStorage.removeItem('preset_trip')
 
-  const createPresetTrip = async () => {
-    const trip = JSON.parse(preset)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+  useEffect(() => {
+    const preset = localStorage.getItem('preset_trip')
+    if (!preset) return
+    localStorage.removeItem('preset_trip')
 
-    const cover_image = await fetchCoverImage(trip.name)
+    const createPresetTrip = async () => {
+      const trip = JSON.parse(preset)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-    const { data: newTrip } = await supabase.from('trips').insert({
-      user_id: user.id,
-      name: trip.name,
-      description: trip.description,
-      budget: trip.budget,
-      cover_image,
-    }).select().single()
+      const cover_image = await fetchCoverImage(trip.name)
 
-    if (!newTrip) return
+      const { data: newTrip } = await supabase.from('trips').insert({
+        user_id: user.id,
+        name: trip.name,
+        description: trip.description,
+        budget: trip.budget,
+        cover_image,
+      }).select().single()
 
-    for (let i = 0; i < trip.steps.length; i++) {
-      const stepName = trip.steps[i]
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(stepName)}&format=json&limit=1`)
-      const geo = await res.json()
-      if (!geo.length) continue
+      if (!newTrip) return
 
-      await supabase.from('steps').insert({
-        trip_id: newTrip.id,
-        name: stepName,
-        latitude: parseFloat(geo[0].lat),
-        longitude: parseFloat(geo[0].lon),
-        order_index: i,
-        transport_mode: 'driving',
-      })
+      for (let i = 0; i < trip.steps.length; i++) {
+        const stepName = trip.steps[i]
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(stepName)}&format=json&limit=1`)
+        const geo = await res.json()
+        if (!geo.length) continue
+
+        await supabase.from('steps').insert({
+          trip_id: newTrip.id,
+          name: stepName,
+          latitude: parseFloat(geo[0].lat),
+          longitude: parseFloat(geo[0].lon),
+          order_index: i,
+          transport_mode: 'driving',
+        })
+      }
+
+      fetchTrips()
+      router.push(`/trip/${newTrip.id}`)
     }
 
-    fetchTrips()
-    router.push(`/trip/${newTrip.id}`)
-  }
+    createPresetTrip()
+  }, [])
 
-  createPresetTrip()
-}, [])
   return (
     <>
       <style>{`
@@ -174,7 +212,6 @@ useEffect(() => {
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'DM Sans', sans-serif; background: #f7f4ef; color: #1a1612; }
-
         .dashboard { min-height: 100vh; }
 
         .navbar {
@@ -221,13 +258,52 @@ useEffect(() => {
           display: flex;
           align-items: flex-end;
           justify-content: space-between;
-          margin-bottom: 3rem;
+          margin-bottom: 2rem;
           padding-bottom: 2rem;
           border-bottom: 1px solid #e8e0d0;
         }
 
         .dashboard-title { font-family: 'Playfair Display', serif; font-size: 3rem; color: #1a1612; line-height: 1; }
         .dashboard-subtitle { font-size: 0.85rem; color: #8a8070; margin-top: 0.5rem; letter-spacing: 0.05em; }
+
+        .stats-banner {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 1rem;
+          margin-bottom: 2.5rem;
+        }
+
+        .stat-card {
+          background: #fff;
+          border: 1px solid #e8e0d0;
+          border-radius: 8px;
+          padding: 1.25rem 1.5rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.4rem;
+        }
+
+        .stat-card-label {
+          font-size: 0.7rem;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          color: #8a8070;
+        }
+
+        .stat-card-value {
+          font-family: 'Playfair Display', serif;
+          font-size: 2rem;
+          color: #1a1612;
+          line-height: 1;
+        }
+
+        .stat-card-value.gold { color: #d4af37; }
+        .stat-card-value.green { color: #6a9e7f; }
+
+        .stat-card-sub {
+          font-size: 0.75rem;
+          color: #b0a090;
+        }
 
         .btn-primary {
           background: #0a0a0a;
@@ -324,7 +400,6 @@ useEffect(() => {
         }
 
         .trip-body { padding: 1.5rem; }
-
         .trip-number { font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: #d4af37; margin-bottom: 0.5rem; }
         .trip-name { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: #1a1612; margin-bottom: 0.4rem; line-height: 1.2; }
         .trip-description { font-size: 0.85rem; color: #8a8070; line-height: 1.6; margin-bottom: 1rem; }
@@ -340,18 +415,8 @@ useEffect(() => {
           margin-bottom: 0.4rem;
         }
 
-        .budget-bar-track {
-          height: 4px;
-          background: #f0ebe0;
-          border-radius: 2px;
-          overflow: hidden;
-        }
-
-        .budget-bar-fill {
-          height: 100%;
-          border-radius: 2px;
-          transition: width 0.3s ease;
-        }
+        .budget-bar-track { height: 4px; background: #f0ebe0; border-radius: 2px; overflow: hidden; }
+        .budget-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s ease; }
 
         .trip-actions {
           display: flex;
@@ -389,7 +454,6 @@ useEffect(() => {
 
         .empty-state { text-align: center; padding: 5rem 2rem; color: #8a8070; }
         .empty-title { font-family: 'Playfair Display', serif; font-size: 2rem; color: #1a1612; margin-bottom: 0.75rem; }
-
         .form-label { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8070; margin-bottom: 0.4rem; display: block; }
       `}</style>
 
@@ -410,6 +474,31 @@ useEffect(() => {
             </div>
             <button className="btn-primary" onClick={openCreateForm}>+ Nouveau voyage</button>
           </div>
+
+          {!loading && trips.length > 0 && (
+            <div className="stats-banner">
+              <div className="stat-card">
+                <div className="stat-card-label">Voyages</div>
+                <div className="stat-card-value">{trips.length}</div>
+                <div className="stat-card-sub">aventures planifiées</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card-label">Étapes</div>
+                <div className="stat-card-value">{stats.totalSteps}</div>
+                <div className="stat-card-sub">destinations visitées</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card-label">Total dépensé</div>
+                <div className="stat-card-value gold">{stats.totalSpent.toFixed(0)} €</div>
+                <div className="stat-card-sub">sur tous les voyages</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card-label">Budget total</div>
+                <div className="stat-card-value green">{stats.totalBudget.toFixed(0)} €</div>
+                <div className="stat-card-sub">budgets prévisionnels</div>
+              </div>
+            </div>
+          )}
 
           {showForm && (
             <div className="form-card">
