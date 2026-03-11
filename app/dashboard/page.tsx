@@ -20,6 +20,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null)
+  const [saving, setSaving] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -77,9 +78,11 @@ export default function Dashboard() {
   }
 
   const saveTrip = async () => {
-    if (!name) return
+    if (!name || saving) return
+    setSaving(true)
+
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) { setSaving(false); return }
 
     const cover_image = await fetchCoverImage(name)
 
@@ -103,6 +106,7 @@ export default function Dashboard() {
 
     setShowForm(false)
     setEditingTrip(null)
+    setSaving(false)
     fetchTrips()
   }
 
@@ -197,6 +201,7 @@ export default function Dashboard() {
         }
 
         .btn-primary:hover { background: #d4af37; color: #0a0a0a; transform: translateY(-1px); }
+        .btn-primary:disabled { background: #8a8070; cursor: not-allowed; transform: none; }
 
         .form-card {
           background: #fff;
@@ -282,9 +287,7 @@ export default function Dashboard() {
         .trip-description { font-size: 0.85rem; color: #8a8070; line-height: 1.6; margin-bottom: 1rem; }
         .trip-dates { font-size: 0.75rem; letter-spacing: 0.05em; color: #b0a090; margin-bottom: 1rem; }
 
-        .trip-budget-bar {
-          margin-bottom: 1rem;
-        }
+        .trip-budget-bar { margin-bottom: 1rem; }
 
         .budget-bar-header {
           display: flex;
@@ -391,7 +394,9 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="form-actions">
-                <button className="btn-primary" onClick={saveTrip}>{editingTrip ? 'Enregistrer' : 'Créer'}</button>
+                <button className="btn-primary" onClick={saveTrip} disabled={saving}>
+                  {saving ? 'Création...' : editingTrip ? 'Enregistrer' : 'Créer'}
+                </button>
                 <button className="btn-secondary" onClick={() => setShowForm(false)}>Annuler</button>
               </div>
             </div>
