@@ -84,9 +84,23 @@ function ClickHandler({ pickMode, onPick }: { pickMode?: boolean, onPick?: (lat:
       if (!pickMode || !onPick) return
       const { lat, lng } = e.latlng
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`)
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`)
         const data = await res.json()
-        const name = data.address?.city || data.address?.town || data.address?.village || data.address?.municipality || data.display_name?.split(',')[0] || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+        const a = data.address || {}
+
+        // On construit un nom lisible par ordre de priorité
+        const lieu = a.tourism || a.amenity || a.leisure || a.shop || a.building || a.road || null
+        const ville = a.city || a.town || a.village || a.municipality || a.county || null
+        const pays = a.country || null
+
+        let name = ''
+        if (lieu && ville) name = `${lieu}, ${ville}`
+        else if (ville && pays) name = `${ville}, ${pays}`
+        else if (lieu && pays) name = `${lieu}, ${pays}`
+        else if (ville) name = ville
+        else if (lieu) name = lieu
+        else name = data.display_name?.split(',').slice(0, 2).join(',').trim() || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+
         onPick(lat, lng, name)
       } catch {
         onPick(lat, lng, `${lat.toFixed(4)}, ${lng.toFixed(4)}`)
