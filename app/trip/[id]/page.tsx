@@ -105,21 +105,15 @@ async function findNearestAirport(cityName: string): Promise<{ lat: number, lng:
   const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityName)}&format=json&limit=1&addressdetails=1`)
   const geoData = await geoRes.json()
   if (!geoData.length) return null
-
   const countryCode = geoData[0].address?.country_code?.toLowerCase()
   if (countryCode === 'fr') return CDG
-
   const cityLat = parseFloat(geoData[0].lat)
   const cityLng = parseFloat(geoData[0].lon)
-
-  let nearest = null
-  let minDist = Infinity
-
+  let nearest = null, minDist = Infinity
   for (const airport of MAJOR_AIRPORTS) {
     const dist = Math.sqrt(Math.pow(airport.lat - cityLat, 2) + Math.pow(airport.lng - cityLng, 2))
     if (dist < minDist) { minDist = dist; nearest = airport }
   }
-
   return nearest
 }
 
@@ -127,10 +121,8 @@ async function findNearestFerryTerminal(cityName: string): Promise<{ lat: number
   const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cityName)}&format=json&limit=1`)
   const geoData = await geoRes.json()
   if (!geoData.length) return null
-
   const lat = parseFloat(geoData[0].lat)
   const lng = parseFloat(geoData[0].lon)
-
   const query = `[out:json][timeout:10];(node["amenity"="ferry_terminal"](around:100000,${lat},${lng});way["amenity"="ferry_terminal"](around:100000,${lat},${lng}););out center 5;`
   try {
     const overpassRes = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query })
@@ -187,8 +179,7 @@ function TripPage() {
     if (!stepName || addingStep) return
     setAddingStep(true)
 
-    let finalLat: number
-    let finalLng: number
+    let finalLat: number, finalLng: number
 
     if (pickedCoords) {
       finalLat = pickedCoords.lat
@@ -205,9 +196,7 @@ function TripPage() {
     let transitDepartureLat = null, transitDepartureLng = null, transitDepartureName = null
 
     if (transportMode === 'plane') {
-      transitDepartureLat = CDG.lat
-      transitDepartureLng = CDG.lng
-      transitDepartureName = CDG.name
+      transitDepartureLat = CDG.lat; transitDepartureLng = CDG.lng; transitDepartureName = CDG.name
       const arrAirport = await findNearestAirport(stepName)
       if (arrAirport) { transitLat = arrAirport.lat; transitLng = arrAirport.lng; transitName = arrAirport.name }
     }
@@ -223,19 +212,14 @@ function TripPage() {
     }
 
     await supabase.from('steps').insert({
-      trip_id: id, name: stepName,
-      latitude: finalLat, longitude: finalLng,
+      trip_id: id, name: stepName, latitude: finalLat, longitude: finalLng,
       order_index: steps.length, transport_mode: transportMode,
       transit_lat: transitLat, transit_lng: transitLng, transit_name: transitName,
       transit_departure_lat: transitDepartureLat, transit_departure_lng: transitDepartureLng, transit_departure_name: transitDepartureName,
     })
 
-    setStepName('')
-    setTransportMode('driving')
-    setShowStepForm(false)
-    setAddingStep(false)
-    setPickedCoords(null)
-    setPickMode(false)
+    setStepName(''); setTransportMode('driving'); setShowStepForm(false)
+    setAddingStep(false); setPickedCoords(null); setPickMode(false)
     fetchSteps()
   }
 
@@ -251,9 +235,7 @@ function TripPage() {
     let transitDepartureLat = null, transitDepartureLng = null, transitDepartureName = null
 
     if (editingTransportMode === 'plane') {
-      transitDepartureLat = CDG.lat
-      transitDepartureLng = CDG.lng
-      transitDepartureName = CDG.name
+      transitDepartureLat = CDG.lat; transitDepartureLng = CDG.lng; transitDepartureName = CDG.name
       const arrAirport = await findNearestAirport(editingStepName)
       if (arrAirport) { transitLat = arrAirport.lat; transitLng = arrAirport.lng; transitName = arrAirport.name }
     }
@@ -270,18 +252,14 @@ function TripPage() {
     }
 
     await supabase.from('steps').update({
-      name: editingStepName,
-      latitude: parseFloat(geo[0].lat), longitude: parseFloat(geo[0].lon),
+      name: editingStepName, latitude: parseFloat(geo[0].lat), longitude: parseFloat(geo[0].lon),
       transport_mode: editingTransportMode,
       transit_lat: transitLat, transit_lng: transitLng, transit_name: transitName,
       transit_departure_lat: transitDepartureLat, transit_departure_lng: transitDepartureLng, transit_departure_name: transitDepartureName,
     }).eq('id', stepId)
 
-    setEditingStepId(null)
-    setEditingStepName('')
-    setEditingTransportMode('driving')
-    setAddingStep(false)
-    fetchSteps()
+    setEditingStepId(null); setEditingStepName(''); setEditingTransportMode('driving')
+    setAddingStep(false); fetchSteps()
   }
 
   const deleteStep = async (stepId: string) => {
@@ -294,14 +272,10 @@ function TripPage() {
     if (!expenseLabel || !expenseAmount) return
     await supabase.from('expenses').insert({
       step_id: stepId, label: expenseLabel,
-      amount: parseFloat(expenseAmount),
-      category: expenseCategory,
+      amount: parseFloat(expenseAmount), category: expenseCategory,
     })
-    setExpenseLabel('')
-    setExpenseAmount('')
-    setExpenseCategory('transport')
-    setActiveStepId(null)
-    fetchExpenses()
+    setExpenseLabel(''); setExpenseAmount(''); setExpenseCategory('transport')
+    setActiveStepId(null); fetchExpenses()
   }
 
   const deleteExpense = async (expenseId: string) => {
@@ -325,10 +299,7 @@ function TripPage() {
   const categoryEmoji: Record<string, string> = {
     transport: '🚗', hébergement: '🏨', nourriture: '🍽️', activités: '🎯', autre: '💼'
   }
-
-  const modeEmoji: Record<string, string> = {
-    driving: '🚗', plane: '✈️', ferry: '⛴️'
-  }
+  const modeEmoji: Record<string, string> = { driving: '🚗', plane: '✈️', ferry: '⛴️' }
 
   return (
     <>
@@ -349,10 +320,7 @@ function TripPage() {
         }
 
         .navbar { display: flex; align-items: center; justify-content: space-between; }
-        .nav-logo {
-          font-family: 'Playfair Display', serif; font-size: 1.1rem;
-          letter-spacing: 0.2em; text-transform: uppercase; color: #d4af37; cursor: pointer;
-        }
+        .nav-logo { font-family: 'Playfair Display', serif; font-size: 1.1rem; letter-spacing: 0.2em; text-transform: uppercase; color: #d4af37; cursor: pointer; }
         .btn-back {
           background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
           color: #fff; padding: 0.5rem 1rem; border-radius: 4px;
@@ -361,12 +329,9 @@ function TripPage() {
         }
         .btn-back:hover { background: rgba(255,255,255,0.2); }
 
-        .trip-title {
-          font-family: 'Playfair Display', serif; font-size: 2.75rem;
-          color: #fff; line-height: 1.1; margin-bottom: 0.4rem;
-        }
+        .trip-title { font-family: 'Playfair Display', serif; font-size: 2.75rem; color: #fff; line-height: 1.1; margin-bottom: 0.4rem; }
         .trip-desc { font-size: 0.9rem; color: rgba(255,255,255,0.7); }
-        .trip-content { max-width: 1100px; margin: 0 auto; padding: 2rem 3rem; }
+        .trip-content { max-width: 1300px; margin: 0 auto; padding: 2rem 3rem; }
 
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
         .stat-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 1.25rem; }
@@ -384,13 +349,29 @@ function TripPage() {
 
         .category-grid {
           display: grid; grid-template-columns: repeat(5, 1fr);
-          gap: 0.75rem; margin-top: 1.25rem;
-          padding-top: 1.25rem; border-top: 1px solid #f0ebe0;
+          gap: 0.75rem; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #f0ebe0;
         }
         .category-item { text-align: center; }
         .category-emoji { font-size: 1.25rem; margin-bottom: 0.25rem; }
         .category-name { font-size: 0.7rem; color: #8a8070; margin-bottom: 0.2rem; text-transform: capitalize; }
         .category-amount { font-size: 0.85rem; font-weight: 500; color: #1a1612; }
+
+        /* NOUVEAU LAYOUT CARTE + ÉTAPES */
+        .itinerary-layout {
+          display: grid;
+          grid-template-columns: 1fr 420px;
+          gap: 1.5rem;
+          align-items: start;
+        }
+
+        .map-column {
+          position: sticky;
+          top: 1.5rem;
+        }
+
+        .map-section { border-radius: 12px; overflow: hidden; border: 1px solid #e8e0d0; margin-bottom: 1rem; }
+
+        .steps-column { display: flex; flex-direction: column; gap: 0; }
 
         .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
         .section-title { font-family: 'Playfair Display', serif; font-size: 1.5rem; }
@@ -404,7 +385,7 @@ function TripPage() {
         .btn-primary:hover { background: #d4af37; color: #0a0a0a; }
         .btn-primary:disabled { background: #8a8070; cursor: not-allowed; }
 
-        .form-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .form-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
 
         .form-input {
           width: 100%; background: #f7f4ef; border: 1px solid #e8e0d0;
@@ -424,63 +405,61 @@ function TripPage() {
 
         .transport-selector { margin-bottom: 0.75rem; }
         .transport-label { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8070; display: block; margin-bottom: 0.5rem; }
-        .transport-options { display: flex; gap: 0.75rem; }
+        .transport-options { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .loading-indicator { font-size: 0.85rem; color: #8a8070; font-style: italic; margin-top: 0.5rem; }
 
-        .map-section { margin-bottom: 2rem; border-radius: 12px; overflow: hidden; border: 1px solid #e8e0d0; }
-
-        .steps-list { display: flex; flex-direction: column; gap: 1rem; }
+        .steps-list { display: flex; flex-direction: column; gap: 0.75rem; }
         .step-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; overflow: hidden; transition: border-color 0.2s; }
         .step-card:hover { border-color: #d4af37; }
 
-        .step-header { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; }
-        .step-left { display: flex; align-items: center; gap: 1rem; }
+        .step-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; }
+        .step-left { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
         .step-number {
-          width: 32px; height: 32px; background: #0a0a0a; color: #d4af37;
+          width: 28px; height: 28px; background: #0a0a0a; color: #d4af37;
           border-radius: 50%; display: flex; align-items: center; justify-content: center;
-          font-size: 0.75rem; font-weight: 500; flex-shrink: 0;
+          font-size: 0.7rem; font-weight: 500; flex-shrink: 0;
         }
-        .step-name { font-family: 'Playfair Display', serif; font-size: 1.15rem; color: #1a1612; }
-        .step-mode { font-size: 0.75rem; color: #8a8070; margin-top: 0.2rem; }
-        .step-right { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; justify-content: flex-end; }
-        .step-total { font-size: 0.9rem; font-weight: 500; color: #d4af37; }
+        .step-name { font-family: 'Playfair Display', serif; font-size: 1rem; color: #1a1612; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .step-mode { font-size: 0.7rem; color: #8a8070; margin-top: 0.15rem; }
+        .step-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+        .step-total { font-size: 0.85rem; font-weight: 500; color: #d4af37; }
 
         .btn-add-expense {
           background: #f7f4ef; border: 1px solid #e8e0d0; color: #1a1612;
-          padding: 0.4rem 0.85rem; border-radius: 4px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;
+          padding: 0.35rem 0.7rem; border-radius: 4px;
+          font-family: 'DM Sans', sans-serif; font-size: 0.7rem; cursor: pointer; transition: all 0.2s;
         }
         .btn-add-expense:hover { background: #0a0a0a; color: #d4af37; border-color: #0a0a0a; }
 
-        .btn-delete-step { background: transparent; border: none; color: #c0a090; font-size: 0.75rem; cursor: pointer; padding: 0.4rem; transition: color 0.2s; }
+        .btn-delete-step { background: transparent; border: none; color: #c0a090; font-size: 0.7rem; cursor: pointer; padding: 0.3rem; transition: color 0.2s; }
         .btn-delete-step:hover { color: #c07060; }
 
-        .expense-form { background: #f7f4ef; padding: 1.25rem 1.5rem; border-top: 1px solid #e8e0d0; }
-        .expense-form-row { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; }
+        .expense-form { background: #f7f4ef; padding: 1rem 1.25rem; border-top: 1px solid #e8e0d0; }
+        .expense-form-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
 
         .form-select {
           background: #fff; border: 1px solid #e8e0d0; border-radius: 4px;
-          padding: 0.75rem 1rem; font-family: 'DM Sans', sans-serif;
-          font-size: 0.85rem; color: #1a1612; outline: none; flex: 1;
+          padding: 0.6rem 0.75rem; font-family: 'DM Sans', sans-serif;
+          font-size: 0.8rem; color: #1a1612; outline: none; flex: 1;
         }
 
         .btn-add {
           background: #0a0a0a; color: #f5f0e8; border: none;
-          padding: 0.75rem 1.25rem; border-radius: 4px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.8rem;
+          padding: 0.6rem 1rem; border-radius: 4px;
+          font-family: 'DM Sans', sans-serif; font-size: 0.75rem;
           cursor: pointer; transition: all 0.2s; white-space: nowrap;
         }
         .btn-add:hover { background: #d4af37; color: #0a0a0a; }
 
-        .expenses-list { padding: 0 1.5rem 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; }
-        .expense-item { display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.85rem; background: #f7f4ef; border-radius: 4px; }
-        .expense-left { display: flex; align-items: center; gap: 0.6rem; }
-        .expense-emoji { font-size: 0.9rem; }
-        .expense-label { font-size: 0.85rem; color: #1a1612; }
-        .expense-right { display: flex; align-items: center; gap: 0.75rem; }
-        .expense-amount { font-size: 0.85rem; font-weight: 500; color: #1a1612; }
+        .expenses-list { padding: 0 1.25rem 1rem; display: flex; flex-direction: column; gap: 0.4rem; }
+        .expense-item { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: #f7f4ef; border-radius: 4px; }
+        .expense-left { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+        .expense-emoji { font-size: 0.85rem; flex-shrink: 0; }
+        .expense-label { font-size: 0.8rem; color: #1a1612; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .expense-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+        .expense-amount { font-size: 0.8rem; font-weight: 500; color: #1a1612; }
 
-        .btn-delete-expense { background: transparent; border: none; color: #c0a090; font-size: 0.7rem; cursor: pointer; transition: color 0.2s; padding: 0.2rem; }
+        .btn-delete-expense { background: transparent; border: none; color: #c0a090; font-size: 0.65rem; cursor: pointer; transition: color 0.2s; padding: 0.2rem; }
         .btn-delete-expense:hover { color: #c07060; }
 
         .empty-state { text-align: center; padding: 4rem 2rem; color: #8a8070; }
@@ -551,232 +530,234 @@ function TripPage() {
                 </div>
               )}
 
-              <div className="section-header">
-                <h2 className="section-title">Itinéraire</h2>
-                <button className="btn-primary" onClick={() => { setShowStepForm(!showStepForm); setPickMode(false); setPickedCoords(null) }}>
-                  + Ajouter une étape
-                </button>
-              </div>
+              <div className="itinerary-layout">
 
-              {/* Carte toujours visible, avec pickMode si le formulaire est ouvert */}
-              <div className="map-section">
-                <Map
-                  steps={steps}
-                  pickMode={pickMode}
-                  onPick={(lat, lng, name) => {
-                    setStepName(name)
-                    setPickedCoords({ lat, lng })
-                    setPickMode(false)
-                    setShowStepForm(true)
-                  }}
-                />
-              </div>
+                {/* COLONNE GAUCHE — carte sticky */}
+                <div className="map-column">
+                  <div className="map-section">
+                    <Map
+                      steps={steps}
+                      pickMode={pickMode}
+                      onPick={(lat, lng, name) => {
+                        setStepName(name)
+                        setPickedCoords({ lat, lng })
+                        setPickMode(false)
+                        setShowStepForm(true)
+                      }}
+                    />
+                  </div>
+                </div>
 
-              {showStepForm && (
-                <div className="form-card">
-                  <input
-                    className="form-input"
-                    type="text"
-                    placeholder="Nom de la ville (ex: Paris, New York...)"
-                    value={stepName}
-                    onChange={e => { setStepName(e.target.value); setPickedCoords(null) }}
-                    onKeyDown={e => e.key === 'Enter' && addStep()}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setPickMode(p => !p)}
-                    style={{
-                      width: '100%', padding: '0.75rem', marginBottom: '0.75rem',
-                      background: pickMode ? '#d4af37' : '#f7f4ef',
-                      color: pickMode ? '#0a0a0a' : '#8a8070',
-                      border: `1px solid ${pickMode ? '#d4af37' : '#e8e0d0'}`,
-                      borderRadius: '4px', fontFamily: 'DM Sans, sans-serif',
-                      fontSize: '0.85rem', cursor: 'pointer', transition: 'all 0.2s',
-                    }}
-                  >
-                    {pickMode ? '✓ Mode placement activé — cliquez sur la carte ci-dessus' : '📍 Ou placer sur la carte'}
-                  </button>
-                  {pickedCoords && (
-                    <div style={{ fontSize: '0.8rem', color: '#6a9e7f', marginBottom: '0.75rem', fontStyle: 'italic' }}>
-                      ✓ Point placé : {stepName} ({pickedCoords.lat.toFixed(4)}, {pickedCoords.lng.toFixed(4)})
+                {/* COLONNE DROITE — étapes */}
+                <div className="steps-column">
+                  <div className="section-header">
+                    <h2 className="section-title">Itinéraire</h2>
+                    <button className="btn-primary" onClick={() => { setShowStepForm(!showStepForm); setPickMode(false); setPickedCoords(null) }}>
+                      + Étape
+                    </button>
+                  </div>
+
+                  {showStepForm && (
+                    <div className="form-card">
+                      <input
+                        className="form-input"
+                        type="text"
+                        placeholder="Nom de la ville..."
+                        value={stepName}
+                        onChange={e => { setStepName(e.target.value); setPickedCoords(null) }}
+                        onKeyDown={e => e.key === 'Enter' && addStep()}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPickMode(p => !p)}
+                        style={{
+                          width: '100%', padding: '0.6rem', marginBottom: '0.75rem',
+                          background: pickMode ? '#d4af37' : '#f7f4ef',
+                          color: pickMode ? '#0a0a0a' : '#8a8070',
+                          border: `1px solid ${pickMode ? '#d4af37' : '#e8e0d0'}`,
+                          borderRadius: '4px', fontFamily: 'DM Sans, sans-serif',
+                          fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s',
+                        }}
+                      >
+                        {pickMode ? '✓ Cliquez sur la carte ←' : '📍 Placer sur la carte'}
+                      </button>
+                      {pickedCoords && (
+                        <div style={{ fontSize: '0.78rem', color: '#6a9e7f', marginBottom: '0.75rem', fontStyle: 'italic' }}>
+                          ✓ {stepName} ({pickedCoords.lat.toFixed(3)}, {pickedCoords.lng.toFixed(3)})
+                        </div>
+                      )}
+                      <div className="transport-selector">
+                        <label className="transport-label">Transport</label>
+                        <div className="transport-options">
+                          {[
+                            { value: 'driving', label: '🚗 Route' },
+                            { value: 'plane', label: '✈️ Avion' },
+                            { value: 'ferry', label: '⛴️ Ferry' },
+                          ].map(mode => (
+                            <button
+                              key={mode.value}
+                              onClick={() => setTransportMode(mode.value)}
+                              style={{
+                                padding: '0.5rem 1rem', borderRadius: '4px',
+                                border: `1px solid ${transportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`,
+                                background: transportMode === mode.value ? '#0a0a0a' : '#f7f4ef',
+                                color: transportMode === mode.value ? '#d4af37' : '#8a8070',
+                                fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem',
+                                cursor: 'pointer', transition: 'all 0.2s',
+                              }}
+                            >
+                              {mode.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {addingStep && <p className="loading-indicator">🔍 Recherche en cours...</p>}
+                      <div className="form-actions">
+                        <button className="btn-primary" onClick={addStep} disabled={addingStep}>
+                          {addingStep ? 'Recherche...' : 'Ajouter'}
+                        </button>
+                        <button className="btn-secondary" onClick={() => { setShowStepForm(false); setPickMode(false); setPickedCoords(null) }}>Annuler</button>
+                      </div>
                     </div>
                   )}
-                  <div className="transport-selector">
-                    <label className="transport-label">Mode de transport pour rejoindre cette étape</label>
-                    <div className="transport-options">
-                      {[
-                        { value: 'driving', label: '🚗 Route' },
-                        { value: 'plane', label: '✈️ Avion' },
-                        { value: 'ferry', label: '⛴️ Ferry' },
-                      ].map(mode => (
-                        <button
-                          key={mode.value}
-                          onClick={() => setTransportMode(mode.value)}
-                          style={{
-                            padding: '0.6rem 1.25rem', borderRadius: '4px',
-                            border: `1px solid ${transportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`,
-                            background: transportMode === mode.value ? '#0a0a0a' : '#f7f4ef',
-                            color: transportMode === mode.value ? '#d4af37' : '#8a8070',
-                            fontFamily: 'DM Sans, sans-serif', fontSize: '0.85rem',
-                            cursor: 'pointer', transition: 'all 0.2s',
-                          }}
-                        >
-                          {mode.label}
-                        </button>
-                      ))}
+
+                  {loading ? (
+                    <p style={{ color: '#8a8070' }}>Chargement...</p>
+                  ) : steps.length === 0 ? (
+                    <div className="empty-state">
+                      <h2 className="empty-title">Aucune étape</h2>
+                      <p>Ajoute ta première destination.</p>
                     </div>
-                  </div>
-                  {addingStep && <p className="loading-indicator">🔍 Recherche en cours...</p>}
-                  <div className="form-actions">
-                    <button className="btn-primary" onClick={addStep} disabled={addingStep}>
-                      {addingStep ? 'Recherche...' : 'Ajouter'}
-                    </button>
-                    <button className="btn-secondary" onClick={() => { setShowStepForm(false); setPickMode(false); setPickedCoords(null) }}>Annuler</button>
-                  </div>
-                </div>
-              )}
+                  ) : (
+                    <div className="steps-list">
+                      {steps.map((step, index) => {
+                        const stepExpenses = expenses.filter(e => e.step_id === step.id)
+                        const stepTotal = stepExpenses.reduce((sum, e) => sum + e.amount, 0)
 
-              {loading ? (
-                <p style={{ color: '#8a8070' }}>Chargement...</p>
-              ) : steps.length === 0 ? (
-                <div className="empty-state">
-                  <h2 className="empty-title">Aucune étape pour l'instant</h2>
-                  <p>Ajoute ta première destination pour commencer l'itinéraire.</p>
-                </div>
-              ) : (
-                <div className="steps-list">
-                  {steps.map((step, index) => {
-                    const stepExpenses = expenses.filter(e => e.step_id === step.id)
-                    const stepTotal = stepExpenses.reduce((sum, e) => sum + e.amount, 0)
-
-                    return (
-                      <div key={step.id} className="step-card">
-                        <div className="step-header">
-                          <div className="step-left">
-                            <div className="step-number">{index + 1}</div>
-                            <div>
-                              <div className="step-name">{step.name}</div>
-                              {step.transport_mode && step.transport_mode !== 'driving' && (
-                                <div className="step-mode">
-                                  {modeEmoji[step.transport_mode]} {step.transport_mode === 'plane' ? 'Avion' : 'Ferry'}
-                                  {step.transit_departure_name && ` · ${step.transit_departure_name}`}
-                                  {step.transit_departure_name && step.transit_name && ' → '}
-                                  {step.transit_name && `${step.transit_name}`}
+                        return (
+                          <div key={step.id} className="step-card">
+                            <div className="step-header">
+                              <div className="step-left">
+                                <div className="step-number">{index + 1}</div>
+                                <div style={{ minWidth: 0 }}>
+                                  <div className="step-name">{step.name}</div>
+                                  {step.transport_mode && step.transport_mode !== 'driving' && (
+                                    <div className="step-mode">
+                                      {modeEmoji[step.transport_mode]} {step.transport_mode === 'plane' ? 'Avion' : 'Ferry'}
+                                      {step.transit_name && ` → ${step.transit_name}`}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
+                              </div>
+                              <div className="step-right">
+                                {stepTotal > 0 && <span className="step-total">{stepTotal.toFixed(0)} €</span>}
+                                <button className="btn-add-expense" onClick={() => setActiveStepId(activeStepId === step.id ? null : step.id)}>+ €</button>
+                                <button className="btn-add-expense" onClick={() => {
+                                  setEditingStepId(step.id)
+                                  setEditingStepName(step.name)
+                                  setEditingTransportMode(step.transport_mode || 'driving')
+                                }}>✏</button>
+                                <button className="btn-delete-step" onClick={() => deleteStep(step.id)}>✕</button>
+                              </div>
                             </div>
-                          </div>
-                          <div className="step-right">
-                            {stepTotal > 0 && <span className="step-total">{stepTotal.toFixed(0)} €</span>}
-                            <button className="btn-add-expense" onClick={() => setActiveStepId(activeStepId === step.id ? null : step.id)}>
-                              + Dépense
-                            </button>
-                            <button className="btn-add-expense" onClick={() => {
-                              setEditingStepId(step.id)
-                              setEditingStepName(step.name)
-                              setEditingTransportMode(step.transport_mode || 'driving')
-                            }}>
-                              ✏ Modifier
-                            </button>
-                            <button className="btn-delete-step" onClick={() => deleteStep(step.id)}>✕</button>
-                          </div>
-                        </div>
 
-                        {editingStepId === step.id && (
-                          <div className="expense-form">
-                            <input
-                              className="form-input"
-                              type="text"
-                              placeholder="Nouveau nom de ville..."
-                              value={editingStepName}
-                              onChange={e => setEditingStepName(e.target.value)}
-                            />
-                            <div className="transport-selector" style={{ marginBottom: '0.75rem' }}>
-                              <label className="transport-label">Mode de transport</label>
-                              <div className="transport-options">
-                                {[
-                                  { value: 'driving', label: '🚗 Route' },
-                                  { value: 'plane', label: '✈️ Avion' },
-                                  { value: 'ferry', label: '⛴️ Ferry' },
-                                ].map(mode => (
-                                  <button
-                                    key={mode.value}
-                                    onClick={() => setEditingTransportMode(mode.value)}
-                                    style={{
-                                      padding: '0.4rem 0.85rem', borderRadius: '4px',
-                                      border: `1px solid ${editingTransportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`,
-                                      background: editingTransportMode === mode.value ? '#0a0a0a' : '#fff',
-                                      color: editingTransportMode === mode.value ? '#d4af37' : '#8a8070',
-                                      fontFamily: 'DM Sans, sans-serif', fontSize: '0.75rem',
-                                      cursor: 'pointer', transition: 'all 0.2s',
-                                    }}
-                                  >
-                                    {mode.label}
+                            {editingStepId === step.id && (
+                              <div className="expense-form">
+                                <input
+                                  className="form-input"
+                                  type="text"
+                                  placeholder="Nouveau nom..."
+                                  value={editingStepName}
+                                  onChange={e => setEditingStepName(e.target.value)}
+                                />
+                                <div className="transport-selector">
+                                  <label className="transport-label">Transport</label>
+                                  <div className="transport-options">
+                                    {[
+                                      { value: 'driving', label: '🚗' },
+                                      { value: 'plane', label: '✈️' },
+                                      { value: 'ferry', label: '⛴️' },
+                                    ].map(mode => (
+                                      <button
+                                        key={mode.value}
+                                        onClick={() => setEditingTransportMode(mode.value)}
+                                        style={{
+                                          padding: '0.4rem 0.75rem', borderRadius: '4px',
+                                          border: `1px solid ${editingTransportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`,
+                                          background: editingTransportMode === mode.value ? '#0a0a0a' : '#fff',
+                                          color: editingTransportMode === mode.value ? '#d4af37' : '#8a8070',
+                                          fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem',
+                                          cursor: 'pointer', transition: 'all 0.2s',
+                                        }}
+                                      >
+                                        {mode.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                {addingStep && <p style={{ fontSize: '0.75rem', color: '#8a8070', fontStyle: 'italic', margin: '0.4rem 0' }}>🔍 Recherche...</p>}
+                                <div className="form-actions">
+                                  <button className="btn-primary" onClick={() => updateStep(step.id)} disabled={addingStep}>
+                                    {addingStep ? '...' : 'Enregistrer'}
                                   </button>
+                                  <button className="btn-secondary" onClick={() => setEditingStepId(null)}>Annuler</button>
+                                </div>
+                              </div>
+                            )}
+
+                            {activeStepId === step.id && (
+                              <div className="expense-form">
+                                <input
+                                  className="form-input"
+                                  type="text"
+                                  placeholder="Libellé..."
+                                  value={expenseLabel}
+                                  onChange={e => setExpenseLabel(e.target.value)}
+                                />
+                                <div className="expense-form-row">
+                                  <input
+                                    className="form-input"
+                                    style={{ margin: 0, flex: 1 }}
+                                    type="number"
+                                    placeholder="Montant €"
+                                    value={expenseAmount}
+                                    onChange={e => setExpenseAmount(e.target.value)}
+                                  />
+                                  <select className="form-select" value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)}>
+                                    <option value="transport">🚗</option>
+                                    <option value="hébergement">🏨</option>
+                                    <option value="nourriture">🍽️</option>
+                                    <option value="activités">🎯</option>
+                                    <option value="autre">💼</option>
+                                  </select>
+                                  <button className="btn-add" onClick={() => addExpense(step.id)}>+</button>
+                                </div>
+                              </div>
+                            )}
+
+                            {stepExpenses.length > 0 && (
+                              <div className="expenses-list">
+                                {stepExpenses.map(expense => (
+                                  <div key={expense.id} className="expense-item">
+                                    <div className="expense-left">
+                                      <span className="expense-emoji">{categoryEmoji[expense.category] || '💼'}</span>
+                                      <span className="expense-label">{expense.label}</span>
+                                    </div>
+                                    <div className="expense-right">
+                                      <span className="expense-amount">{expense.amount.toFixed(2)} €</span>
+                                      <button className="btn-delete-expense" onClick={() => deleteExpense(expense.id)}>✕</button>
+                                    </div>
+                                  </div>
                                 ))}
                               </div>
-                            </div>
-                            {addingStep && <p style={{ fontSize: '0.8rem', color: '#8a8070', fontStyle: 'italic', marginBottom: '0.5rem' }}>🔍 Recherche en cours...</p>}
-                            <div className="form-actions">
-                              <button className="btn-primary" onClick={() => updateStep(step.id)} disabled={addingStep}>
-                                {addingStep ? 'Recherche...' : 'Enregistrer'}
-                              </button>
-                              <button className="btn-secondary" onClick={() => setEditingStepId(null)}>Annuler</button>
-                            </div>
+                            )}
                           </div>
-                        )}
-
-                        {activeStepId === step.id && (
-                          <div className="expense-form">
-                            <input
-                              className="form-input"
-                              type="text"
-                              placeholder="Libellé (ex: Hôtel, Essence...)"
-                              value={expenseLabel}
-                              onChange={e => setExpenseLabel(e.target.value)}
-                            />
-                            <div className="expense-form-row">
-                              <input
-                                className="form-input"
-                                style={{ margin: 0, flex: 1 }}
-                                type="number"
-                                placeholder="Montant (€)"
-                                value={expenseAmount}
-                                onChange={e => setExpenseAmount(e.target.value)}
-                              />
-                              <select className="form-select" value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)}>
-                                <option value="transport">🚗 Transport</option>
-                                <option value="hébergement">🏨 Hébergement</option>
-                                <option value="nourriture">🍽️ Nourriture</option>
-                                <option value="activités">🎯 Activités</option>
-                                <option value="autre">💼 Autre</option>
-                              </select>
-                              <button className="btn-add" onClick={() => addExpense(step.id)}>Ajouter</button>
-                            </div>
-                          </div>
-                        )}
-
-                        {stepExpenses.length > 0 && (
-                          <div className="expenses-list">
-                            {stepExpenses.map(expense => (
-                              <div key={expense.id} className="expense-item">
-                                <div className="expense-left">
-                                  <span className="expense-emoji">{categoryEmoji[expense.category] || '💼'}</span>
-                                  <span className="expense-label">{expense.label}</span>
-                                </div>
-                                <div className="expense-right">
-                                  <span className="expense-amount">{expense.amount.toFixed(2)} €</span>
-                                  <button className="btn-delete-expense" onClick={() => deleteExpense(expense.id)}>✕</button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </>
         )}
