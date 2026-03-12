@@ -222,10 +222,19 @@ export default function Home() {
 
         .dest-card:hover .dest-cta { opacity: 1; }
 
-        @media (max-width: 768px) {
+       @media (max-width: 768px) {
+         body { overflow: auto; }
           .login-page { grid-template-columns: 1fr; }
           .login-right { display: none; }
+          .login-left { padding: 2rem 1.5rem; min-height: 100vh; }
+          .hero-title { font-size: 2.75rem; }
+          .btn-google { width: 100%; justify-content: center; }
         }
+
+@media (max-width: 400px) {
+  .login-left { padding: 1.5rem 1rem; }
+  .hero-title { font-size: 2.25rem; }
+}
       `}</style>
 
       <div className="login-page">
