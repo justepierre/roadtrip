@@ -12,6 +12,7 @@ interface Trip {
   end_date: string
   budget: number
   cover_image: string
+  user_id: string
 }
 
 interface GlobalStats {
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const [endDate, setEndDate] = useState('')
   const [budget, setBudget] = useState('')
   const [userEmail, setUserEmail] = useState('')
+  const [userId, setUserId] = useState('')
   const [stats, setStats] = useState<GlobalStats>({ totalSteps: 0, totalBudget: 0, totalSpent: 0 })
   const [tripExpenses, setTripExpenses] = useState<Record<string, number>>({})
   const [tripCompletion, setTripCompletion] = useState<Record<string, { total: number, completed: number }>>({})
@@ -41,22 +43,40 @@ export default function Dashboard() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     setUserEmail(user.email || '')
+    setUserId(user.id)
 
-    const { data } = await supabase
+    // Récupère les voyages dont je suis propriétaire
+    const { data: ownTrips } = await supabase
       .from('trips')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    const tripList = data || []
-    setTrips(tripList)
+    // Récupère les voyages dont je suis membre
+    const { data: memberRows } = await supabase
+      .from('trip_members')
+      .select('trip_id')
+      .eq('user_id', user.id)
+
+    const memberTripIds = memberRows?.map(r => r.trip_id) || []
+    let memberTrips: Trip[] = []
+    if (memberTripIds.length > 0) {
+      const { data } = await supabase
+        .from('trips')
+        .select('*')
+        .in('id', memberTripIds)
+      memberTrips = data || []
+    }
+
+    // Fusionne sans doublons
+    const allTrips = [...(ownTrips || []), ...memberTrips.filter(mt => !ownTrips?.find(t => t.id === mt.id))]
+    setTrips(allTrips)
     setLoading(false)
 
-    const totalBudget = tripList.reduce((sum, t) => sum + (t.budget || 0), 0)
+    const totalBudget = allTrips.reduce((sum, t) => sum + (t.budget || 0), 0)
 
-    if (tripList.length > 0) {
-      const tripIds = tripList.map(t => t.id)
-
+    if (allTrips.length > 0) {
+      const tripIds = allTrips.map(t => t.id)
       const { data: stepsData } = await supabase
         .from('steps')
         .select('id, trip_id, completed')
@@ -65,7 +85,6 @@ export default function Dashboard() {
       const totalSteps = stepsData?.length || 0
       const stepIds = stepsData?.map(s => s.id) || []
 
-      // Calcul completion par voyage
       const completionMap: Record<string, { total: number, completed: number }> = {}
       stepsData?.forEach(s => {
         if (!completionMap[s.trip_id]) completionMap[s.trip_id] = { total: 0, completed: 0 }
@@ -155,6 +174,21 @@ export default function Dashboard() {
     fetchTrips()
   }
 
+  const leaveTrip = async (tripId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm('Quitter ce voyage partagé ?')) return
+    await supabase.from('trip_members').delete()
+      .eq('trip_id', tripId).eq('user_id', userId)
+    fetchTrips()
+  }
+
+  const copyInviteLink = (tripId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const link = `${window.location.origin}/join/${tripId}`
+    navigator.clipboard.writeText(link)
+    alert('Lien copié ! Partage-le avec tes compagnons de voyage.')
+  }
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/')
@@ -196,94 +230,95 @@ export default function Dashboard() {
   return (
     <>
       <style>{`
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap');
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'DM Sans', sans-serif; background: #f7f4ef; color: #1a1612; }
-  .dashboard { min-height: 100vh; }
-  .navbar { background: #0a0a0a; padding: 1.25rem 3rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-  .nav-logo { font-family: 'Playfair Display', serif; font-size: 1.1rem; letter-spacing: 0.2em; text-transform: uppercase; color: #d4af37; cursor: pointer; }
-  .nav-right { display: flex; align-items: center; gap: 1.5rem; }
-  .nav-email { font-size: 0.8rem; color: #8a8070; letter-spacing: 0.05em; }
-  .btn-logout { background: transparent; border: 1px solid #3a3530; color: #8a8070; padding: 0.5rem 1rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; letter-spacing: 0.05em; }
-  .btn-logout:hover { border-color: #d4af37; color: #d4af37; }
-  .dashboard-content { padding: 4rem 3rem; max-width: 1200px; margin: 0 auto; }
-  .dashboard-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 2rem; padding-bottom: 2rem; border-bottom: 1px solid #e8e0d0; }
-  .dashboard-title { font-family: 'Playfair Display', serif; font-size: 3rem; color: #1a1612; line-height: 1; }
-  .dashboard-subtitle { font-size: 0.85rem; color: #8a8070; margin-top: 0.5rem; letter-spacing: 0.05em; }
-  .stats-banner { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem; }
-  .stat-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
-  .stat-card-label { font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: #8a8070; }
-  .stat-card-value { font-family: 'Playfair Display', serif; font-size: 2rem; color: #1a1612; line-height: 1; }
-  .stat-card-value.gold { color: #d4af37; }
-  .stat-card-value.green { color: #6a9e7f; }
-  .stat-card-sub { font-size: 0.75rem; color: #b0a090; }
-  .btn-primary { background: #0a0a0a; color: #f5f0e8; border: none; padding: 0.85rem 1.75rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s; letter-spacing: 0.05em; }
-  .btn-primary:hover { background: #d4af37; color: #0a0a0a; transform: translateY(-1px); }
-  .btn-primary:disabled { background: #8a8070; cursor: not-allowed; transform: none; }
-  .form-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 2rem; margin-bottom: 2.5rem; }
-  .form-title { font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 1.5rem; color: #1a1612; }
-  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-  .form-full { grid-column: 1 / -1; }
-  .form-input { width: 100%; background: #f7f4ef; border: 1px solid #e8e0d0; border-radius: 4px; padding: 0.85rem 1rem; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; color: #1a1612; outline: none; transition: border-color 0.2s; }
-  .form-input:focus { border-color: #d4af37; background: #fff; }
-  .form-actions { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
-  .btn-secondary { background: transparent; border: 1px solid #e8e0d0; color: #8a8070; padding: 0.75rem 1.5rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
-  .btn-secondary:hover { border-color: #1a1612; color: #1a1612; }
-  .trips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; }
-  .trip-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 12px; cursor: pointer; transition: all 0.25s; overflow: hidden; position: relative; }
-  .trip-card:hover { transform: translateY(-4px); box-shadow: 0 16px 50px rgba(0,0,0,0.1); }
-  .trip-cover { width: 100%; height: 180px; object-fit: cover; display: block; background: #e8e0d0; }
-  .trip-cover-placeholder { width: 100%; height: 180px; background: linear-gradient(135deg, #1a1612 0%, #3a3530 100%); display: flex; align-items: center; justify-content: center; font-size: 3rem; }
-  .trip-body { padding: 1.5rem; }
-  .trip-number { font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: #d4af37; margin-bottom: 0.5rem; }
-  .trip-name { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: #1a1612; margin-bottom: 0.4rem; line-height: 1.2; }
-  .trip-description { font-size: 0.85rem; color: #8a8070; line-height: 1.6; margin-bottom: 1rem; }
-  .trip-dates { font-size: 0.75rem; letter-spacing: 0.05em; color: #b0a090; margin-bottom: 1rem; }
-  .trip-budget-bar { margin-bottom: 1rem; }
-  .budget-bar-header { display: flex; justify-content: space-between; font-size: 0.75rem; color: #8a8070; margin-bottom: 0.4rem; }
-  .budget-bar-track { height: 4px; background: #f0ebe0; border-radius: 2px; overflow: hidden; }
-  .budget-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s ease; }
-  .trip-actions { display: flex; gap: 0.5rem; padding-top: 1rem; border-top: 1px solid #f0ebe0; }
-  .btn-edit { font-size: 0.75rem; color: #8a8070; background: #f7f4ef; border: none; padding: 0.4rem 0.85rem; border-radius: 3px; cursor: pointer; transition: all 0.2s; letter-spacing: 0.05em; }
-  .btn-edit:hover { background: #1a1612; color: #f5f0e8; }
-  .btn-delete { font-size: 0.75rem; color: #c0706050; background: transparent; border: none; padding: 0.4rem 0.85rem; border-radius: 3px; cursor: pointer; transition: all 0.2s; }
-  .btn-delete:hover { color: #c07060; background: #fdf0ee; }
-  .empty-state { text-align: center; padding: 5rem 2rem; color: #8a8070; }
-  .empty-title { font-family: 'Playfair Display', serif; font-size: 2rem; color: #1a1612; margin-bottom: 0.75rem; }
-  .form-label { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8070; margin-bottom: 0.4rem; display: block; }
-  .completed-badge { position: absolute; top: 12px; right: 12px; background: linear-gradient(135deg, #6a9e7f, #4a8a6a); color: #fff; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.3rem; box-shadow: 0 2px 10px rgba(74,138,106,0.4); }
-  .steps-progress { margin-bottom: 0.75rem; }
-  .steps-progress-header { display: flex; justify-content: space-between; font-size: 0.72rem; color: #8a8070; margin-bottom: 0.35rem; }
-  .steps-progress-track { height: 3px; background: #f0ebe0; border-radius: 2px; overflow: hidden; }
-  .steps-progress-fill { height: 100%; background: #6a9e7f; border-radius: 2px; transition: width 0.3s ease; }
-  .trip-card.trip-completed { border-color: #6a9e7f; }
-  .trip-card.trip-completed:hover { box-shadow: 0 16px 50px rgba(106,158,127,0.2); }
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: #f7f4ef; color: #1a1612; }
+        .dashboard { min-height: 100vh; }
+        .navbar { background: #0a0a0a; padding: 1.25rem 3rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+        .nav-logo { font-family: 'Playfair Display', serif; font-size: 1.1rem; letter-spacing: 0.2em; text-transform: uppercase; color: #d4af37; cursor: pointer; }
+        .nav-right { display: flex; align-items: center; gap: 1.5rem; }
+        .nav-email { font-size: 0.8rem; color: #8a8070; letter-spacing: 0.05em; }
+        .btn-logout { background: transparent; border: 1px solid #3a3530; color: #8a8070; padding: 0.5rem 1rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
+        .btn-logout:hover { border-color: #d4af37; color: #d4af37; }
+        .dashboard-content { padding: 4rem 3rem; max-width: 1200px; margin: 0 auto; }
+        .dashboard-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 2rem; padding-bottom: 2rem; border-bottom: 1px solid #e8e0d0; }
+        .dashboard-title { font-family: 'Playfair Display', serif; font-size: 3rem; color: #1a1612; line-height: 1; }
+        .dashboard-subtitle { font-size: 0.85rem; color: #8a8070; margin-top: 0.5rem; letter-spacing: 0.05em; }
+        .stats-banner { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2.5rem; }
+        .stat-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
+        .stat-card-label { font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: #8a8070; }
+        .stat-card-value { font-family: 'Playfair Display', serif; font-size: 2rem; color: #1a1612; line-height: 1; }
+        .stat-card-value.gold { color: #d4af37; }
+        .stat-card-value.green { color: #6a9e7f; }
+        .stat-card-sub { font-size: 0.75rem; color: #b0a090; }
+        .btn-primary { background: #0a0a0a; color: #f5f0e8; border: none; padding: 0.85rem 1.75rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s; letter-spacing: 0.05em; }
+        .btn-primary:hover { background: #d4af37; color: #0a0a0a; transform: translateY(-1px); }
+        .btn-primary:disabled { background: #8a8070; cursor: not-allowed; transform: none; }
+        .form-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 2rem; margin-bottom: 2.5rem; }
+        .form-title { font-family: 'Playfair Display', serif; font-size: 1.5rem; margin-bottom: 1.5rem; color: #1a1612; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .form-full { grid-column: 1 / -1; }
+        .form-input { width: 100%; background: #f7f4ef; border: 1px solid #e8e0d0; border-radius: 4px; padding: 0.85rem 1rem; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; color: #1a1612; outline: none; transition: border-color 0.2s; }
+        .form-input:focus { border-color: #d4af37; background: #fff; }
+        .form-actions { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+        .btn-secondary { background: transparent; border: 1px solid #e8e0d0; color: #8a8070; padding: 0.75rem 1.5rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
+        .btn-secondary:hover { border-color: #1a1612; color: #1a1612; }
+        .trips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; }
+        .trip-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 12px; cursor: pointer; transition: all 0.25s; overflow: hidden; position: relative; }
+        .trip-card:hover { transform: translateY(-4px); box-shadow: 0 16px 50px rgba(0,0,0,0.1); }
+        .trip-cover { width: 100%; height: 180px; object-fit: cover; display: block; background: #e8e0d0; }
+        .trip-cover-placeholder { width: 100%; height: 180px; background: linear-gradient(135deg, #1a1612 0%, #3a3530 100%); display: flex; align-items: center; justify-content: center; font-size: 3rem; }
+        .trip-body { padding: 1.5rem; }
+        .trip-number { font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: #d4af37; margin-bottom: 0.5rem; }
+        .trip-name { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: #1a1612; margin-bottom: 0.4rem; line-height: 1.2; }
+        .trip-description { font-size: 0.85rem; color: #8a8070; line-height: 1.6; margin-bottom: 1rem; }
+        .trip-dates { font-size: 0.75rem; letter-spacing: 0.05em; color: #b0a090; margin-bottom: 1rem; }
+        .trip-budget-bar { margin-bottom: 1rem; }
+        .budget-bar-header { display: flex; justify-content: space-between; font-size: 0.75rem; color: #8a8070; margin-bottom: 0.4rem; }
+        .budget-bar-track { height: 4px; background: #f0ebe0; border-radius: 2px; overflow: hidden; }
+        .budget-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s ease; }
+        .trip-actions { display: flex; gap: 0.5rem; padding-top: 1rem; border-top: 1px solid #f0ebe0; flex-wrap: wrap; }
+        .btn-edit { font-size: 0.75rem; color: #8a8070; background: #f7f4ef; border: none; padding: 0.4rem 0.85rem; border-radius: 3px; cursor: pointer; transition: all 0.2s; }
+        .btn-edit:hover { background: #1a1612; color: #f5f0e8; }
+        .btn-delete { font-size: 0.75rem; color: #c0706050; background: transparent; border: none; padding: 0.4rem 0.85rem; border-radius: 3px; cursor: pointer; transition: all 0.2s; }
+        .btn-delete:hover { color: #c07060; background: #fdf0ee; }
+        .btn-invite { font-size: 0.75rem; color: #d4af37; background: transparent; border: 1px solid #d4af3740; padding: 0.4rem 0.85rem; border-radius: 3px; cursor: pointer; transition: all 0.2s; }
+        .btn-invite:hover { background: #d4af3715; border-color: #d4af37; }
+        .shared-badge { font-size: 0.7rem; color: #8a8070; background: #f0ebe0; padding: 0.2rem 0.6rem; border-radius: 10px; display: inline-flex; align-items: center; gap: 0.3rem; margin-bottom: 0.75rem; }
+        .empty-state { text-align: center; padding: 5rem 2rem; color: #8a8070; }
+        .empty-title { font-family: 'Playfair Display', serif; font-size: 2rem; color: #1a1612; margin-bottom: 0.75rem; }
+        .form-label { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8070; margin-bottom: 0.4rem; display: block; }
+        .completed-badge { position: absolute; top: 12px; right: 12px; background: linear-gradient(135deg, #6a9e7f, #4a8a6a); color: #fff; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.72rem; font-weight: 500; display: flex; align-items: center; gap: 0.3rem; box-shadow: 0 2px 10px rgba(74,138,106,0.4); }
+        .steps-progress { margin-bottom: 0.75rem; }
+        .steps-progress-header { display: flex; justify-content: space-between; font-size: 0.72rem; color: #8a8070; margin-bottom: 0.35rem; }
+        .steps-progress-track { height: 3px; background: #f0ebe0; border-radius: 2px; overflow: hidden; }
+        .steps-progress-fill { height: 100%; background: #6a9e7f; border-radius: 2px; transition: width 0.3s ease; }
+        .trip-card.trip-completed { border-color: #6a9e7f; }
+        .trip-card.trip-completed:hover { box-shadow: 0 16px 50px rgba(106,158,127,0.2); }
 
-  /* ── TABLETTE (≤ 1024px) ── */
-  @media (max-width: 1024px) {
-    .navbar { padding: 1rem 1.5rem; }
-    .dashboard-content { padding: 2.5rem 1.5rem; }
-    .stats-banner { grid-template-columns: repeat(2, 1fr); }
-    .dashboard-title { font-size: 2.25rem; }
-    .trips-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
-  }
+        @media (max-width: 1024px) {
+          .navbar { padding: 1rem 1.5rem; }
+          .dashboard-content { padding: 2.5rem 1.5rem; }
+          .stats-banner { grid-template-columns: repeat(2, 1fr); }
+          .dashboard-title { font-size: 2.25rem; }
+          .trips-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+        }
+        @media (max-width: 640px) {
+          .navbar { padding: 1rem; }
+          .nav-email { display: none; }
+          .dashboard-content { padding: 1.5rem 1rem; }
+          .dashboard-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+          .dashboard-title { font-size: 1.75rem; }
+          .stats-banner { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+          .stat-card-value { font-size: 1.5rem; }
+          .stat-card-sub { display: none; }
+          .form-grid { grid-template-columns: 1fr; }
+          .form-full { grid-column: 1; }
+          .trips-grid { grid-template-columns: 1fr; }
+          .trip-card:hover { transform: none; }
+        }
+      `}</style>
 
-  /* ── MOBILE (≤ 640px) ── */
-  @media (max-width: 640px) {
-    .navbar { padding: 1rem; }
-    .nav-email { display: none; }
-    .dashboard-content { padding: 1.5rem 1rem; }
-    .dashboard-header { flex-direction: column; align-items: flex-start; gap: 1rem; }
-    .dashboard-title { font-size: 1.75rem; }
-    .stats-banner { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
-    .stat-card-value { font-size: 1.5rem; }
-    .stat-card-sub { display: none; }
-    .form-grid { grid-template-columns: 1fr; }
-    .form-full { grid-column: 1; }
-    .trips-grid { grid-template-columns: 1fr; }
-    .trip-card:hover { transform: none; }
-  }
-`}</style>
       <div className="dashboard">
         <nav className="navbar">
           <div className="nav-logo">Roadtrip</div>
@@ -362,7 +397,7 @@ export default function Dashboard() {
           )}
 
           {loading ? (
-            <p style={{ color: '#8a8070', letterSpacing: '0.05em' }}>Chargement...</p>
+            <p style={{ color: '#8a8070' }}>Chargement...</p>
           ) : trips.length === 0 ? (
             <div className="empty-state">
               <h2 className="empty-title">Aucun voyage pour l'instant</h2>
@@ -376,6 +411,7 @@ export default function Dashboard() {
                 const barColor = budgetPercent > 90 ? '#c07060' : budgetPercent > 70 ? '#d4af37' : '#6a9e7f'
                 const completion = tripCompletion[trip.id]
                 const isCompleted = completion && completion.total > 0 && completion.completed === completion.total
+                const isOwner = trip.user_id === userId
 
                 return (
                   <div
@@ -383,12 +419,7 @@ export default function Dashboard() {
                     className={`trip-card ${isCompleted ? 'trip-completed' : ''}`}
                     onClick={() => router.push(`/trip/${trip.id}`)}
                   >
-                    {/* Badge voyage terminé */}
-                    {isCompleted && (
-                      <div className="completed-badge">
-                        ✓ Voyage terminé
-                      </div>
-                    )}
+                    {isCompleted && <div className="completed-badge">✓ Voyage terminé</div>}
 
                     {trip.cover_image ? (
                       <img src={trip.cover_image} alt={trip.name} className="trip-cover" />
@@ -398,11 +429,11 @@ export default function Dashboard() {
 
                     <div className="trip-body">
                       <div className="trip-number">Voyage {String(index + 1).padStart(2, '0')}</div>
+                      {!isOwner && <div className="shared-badge">👥 Partagé avec moi</div>}
                       <h2 className="trip-name">{trip.name}</h2>
                       {trip.description && <p className="trip-description">{trip.description}</p>}
                       {trip.start_date && <p className="trip-dates">{trip.start_date} → {trip.end_date}</p>}
 
-                      {/* Barre de progression des étapes */}
                       {completion && completion.total > 0 && (
                         <div className="steps-progress">
                           <div className="steps-progress-header">
@@ -410,10 +441,7 @@ export default function Dashboard() {
                             <span>{completion.completed}/{completion.total}</span>
                           </div>
                           <div className="steps-progress-track">
-                            <div
-                              className="steps-progress-fill"
-                              style={{ width: `${(completion.completed / completion.total) * 100}%` }}
-                            />
+                            <div className="steps-progress-fill" style={{ width: `${(completion.completed / completion.total) * 100}%` }} />
                           </div>
                         </div>
                       )}
@@ -431,8 +459,15 @@ export default function Dashboard() {
                       )}
 
                       <div className="trip-actions">
-                        <button className="btn-edit" onClick={e => openEditForm(trip, e)}>✏ Modifier</button>
-                        <button className="btn-delete" onClick={e => deleteTrip(trip.id, e)}>Supprimer</button>
+                        {isOwner ? (
+                          <>
+                            <button className="btn-edit" onClick={e => openEditForm(trip, e)}>✏ Modifier</button>
+                            <button className="btn-invite" onClick={e => copyInviteLink(trip.id, e)}>🔗 Inviter</button>
+                            <button className="btn-delete" onClick={e => deleteTrip(trip.id, e)}>Supprimer</button>
+                          </>
+                        ) : (
+                          <button className="btn-delete" onClick={e => leaveTrip(trip.id, e)}>Quitter</button>
+                        )}
                       </div>
                     </div>
                   </div>
