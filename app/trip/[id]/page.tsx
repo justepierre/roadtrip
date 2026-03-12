@@ -4,40 +4,32 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import dynamic from 'next/dynamic'
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor,
+  useSensor, useSensors, DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove, SortableContext, sortableKeyboardCoordinates,
+  useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 const Map = dynamic(() => import('@/app/components/map'), { ssr: false })
 
 interface Trip {
-  id: string
-  name: string
-  description: string
-  start_date: string
-  end_date: string
-  budget: number
-  cover_image: string
+  id: string; name: string; description: string
+  start_date: string; end_date: string; budget: number; cover_image: string
 }
 
 interface Step {
-  id: string
-  name: string
-  latitude: number
-  longitude: number
-  order_index: number
-  transport_mode: string
-  transit_lat?: number
-  transit_lng?: number
-  transit_name?: string
-  transit_departure_lat?: number
-  transit_departure_lng?: number
-  transit_departure_name?: string
+  id: string; name: string; latitude: number; longitude: number
+  order_index: number; transport_mode: string; completed: boolean
+  transit_lat?: number; transit_lng?: number; transit_name?: string
+  transit_departure_lat?: number; transit_departure_lng?: number; transit_departure_name?: string
 }
 
 interface Expense {
-  id: string
-  step_id: string
-  label: string
-  amount: number
-  category: string
+  id: string; step_id: string; label: string; amount: number; category: string
 }
 
 const CDG = { lat: 49.0097, lng: 2.5479, name: 'Aéroport Paris CDG' }
@@ -135,6 +127,181 @@ async function findNearestFerryTerminal(cityName: string): Promise<{ lat: number
   return null
 }
 
+function SortableStepCard({
+  step, index, expenses, activeStepId, editingStepId, editingStepName,
+  editingTransportMode, addingStep, expenseLabel, expenseAmount, expenseCategory,
+  modeEmoji, categoryEmoji,
+  onToggleExpense, onStartEdit, onDelete, onToggleComplete,
+  onEditNameChange, onEditModeChange, onUpdateStep, onCancelEdit,
+  onExpenseLabelChange, onExpenseAmountChange, onExpenseCategoryChange,
+  onAddExpense, onDeleteExpense,
+}: any) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id })
+  const stepExpenses = expenses.filter((e: Expense) => e.step_id === step.id)
+  const stepTotal = stepExpenses.reduce((sum: number, e: Expense) => sum + e.amount, 0)
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      className="step-card"
+    >
+      <div className="step-header">
+        <div className="step-left">
+          {/* Poignée drag */}
+          <div
+            {...attributes}
+            {...listeners}
+            style={{
+              cursor: isDragging ? 'grabbing' : 'grab',
+              color: '#c0b090', fontSize: '1rem',
+              padding: '0 0.3rem', flexShrink: 0,
+              touchAction: 'none', userSelect: 'none',
+            }}
+            title="Glisser pour réordonner"
+          >
+            ⠿
+          </div>
+
+          {/* Coche de validation */}
+          <div
+            onClick={() => onToggleComplete(step.id, step.completed)}
+            title={step.completed ? 'Marquer comme non complété' : 'Marquer comme complété'}
+            style={{
+              width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
+              border: `2px solid ${step.completed ? '#6a9e7f' : '#e8e0d0'}`,
+              background: step.completed ? '#6a9e7f' : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', transition: 'all 0.2s',
+              fontSize: '0.65rem', color: '#fff',
+            }}
+          >
+            {step.completed ? '✓' : ''}
+          </div>
+
+          <div className="step-number">{index + 1}</div>
+          <div style={{ minWidth: 0 }}>
+            <div
+              className="step-name"
+              style={{
+                textDecoration: step.completed ? 'line-through' : 'none',
+                opacity: step.completed ? 0.45 : 1,
+                transition: 'all 0.2s',
+              }}
+            >
+              {step.name}
+            </div>
+            {step.transport_mode && step.transport_mode !== 'driving' && (
+              <div className="step-mode">
+                {modeEmoji[step.transport_mode]} {step.transport_mode === 'plane' ? 'Avion' : 'Ferry'}
+                {step.transit_name && ` → ${step.transit_name}`}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="step-right">
+          {stepTotal > 0 && <span className="step-total">{stepTotal.toFixed(0)} €</span>}
+          <button className="btn-add-expense" onClick={() => onToggleExpense(step.id)}>+ €</button>
+          <button className="btn-add-expense" onClick={() => onStartEdit(step)}>✏</button>
+          <button className="btn-delete-step" onClick={() => onDelete(step.id)}>✕</button>
+        </div>
+      </div>
+
+      {editingStepId === step.id && (
+        <div className="expense-form">
+          <input
+            className="form-input"
+            type="text"
+            placeholder="Nouveau nom..."
+            value={editingStepName}
+            onChange={e => onEditNameChange(e.target.value)}
+          />
+          <div className="transport-selector">
+            <label className="transport-label">Transport</label>
+            <div className="transport-options">
+              {[
+                { value: 'driving', label: '🚗' },
+                { value: 'plane', label: '✈️' },
+                { value: 'ferry', label: '⛴️' },
+              ].map(mode => (
+                <button
+                  key={mode.value}
+                  onClick={() => onEditModeChange(mode.value)}
+                  style={{
+                    padding: '0.4rem 0.75rem', borderRadius: '4px',
+                    border: `1px solid ${editingTransportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`,
+                    background: editingTransportMode === mode.value ? '#0a0a0a' : '#fff',
+                    color: editingTransportMode === mode.value ? '#d4af37' : '#8a8070',
+                    fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem',
+                    cursor: 'pointer', transition: 'all 0.2s',
+                  }}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {addingStep && <p style={{ fontSize: '0.75rem', color: '#8a8070', fontStyle: 'italic', margin: '0.4rem 0' }}>🔍 Recherche...</p>}
+          <div className="form-actions">
+            <button className="btn-primary" onClick={() => onUpdateStep(step.id)} disabled={addingStep}>
+              {addingStep ? '...' : 'Enregistrer'}
+            </button>
+            <button className="btn-secondary" onClick={onCancelEdit}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {activeStepId === step.id && (
+        <div className="expense-form">
+          <input
+            className="form-input"
+            type="text"
+            placeholder="Libellé..."
+            value={expenseLabel}
+            onChange={e => onExpenseLabelChange(e.target.value)}
+          />
+          <div className="expense-form-row">
+            <input
+              className="form-input"
+              style={{ margin: 0, flex: 1 }}
+              type="number"
+              placeholder="Montant €"
+              value={expenseAmount}
+              onChange={e => onExpenseAmountChange(e.target.value)}
+            />
+            <select className="form-select" value={expenseCategory} onChange={e => onExpenseCategoryChange(e.target.value)}>
+              <option value="transport">🚗</option>
+              <option value="hébergement">🏨</option>
+              <option value="nourriture">🍽️</option>
+              <option value="activités">🎯</option>
+              <option value="autre">💼</option>
+            </select>
+            <button className="btn-add" onClick={() => onAddExpense(step.id)}>+</button>
+          </div>
+        </div>
+      )}
+
+      {stepExpenses.length > 0 && (
+        <div className="expenses-list">
+          {stepExpenses.map((expense: Expense) => (
+            <div key={expense.id} className="expense-item">
+              <div className="expense-left">
+                <span className="expense-emoji">{categoryEmoji[expense.category] || '💼'}</span>
+                <span className="expense-label">{expense.label}</span>
+              </div>
+              <div className="expense-right">
+                <span className="expense-amount">{expense.amount.toFixed(2)} €</span>
+                <button className="btn-delete-expense" onClick={() => onDeleteExpense(expense.id)}>✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TripPage() {
   const params = useParams()
   const id = params.id as string
@@ -157,6 +324,23 @@ function TripPage() {
   const [pickMode, setPickMode] = useState(false)
   const [pickedCoords, setPickedCoords] = useState<{ lat: number, lng: number } | null>(null)
 
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = steps.findIndex(s => s.id === active.id)
+    const newIndex = steps.findIndex(s => s.id === over.id)
+    const newSteps = arrayMove(steps, oldIndex, newIndex)
+    setSteps(newSteps)
+    await Promise.all(newSteps.map((step, i) =>
+      supabase.from('steps').update({ order_index: i }).eq('id', step.id)
+    ))
+  }
+
   const fetchTrip = async () => {
     const { data } = await supabase.from('trips').select('*').eq('id', id).single()
     setTrip(data)
@@ -175,32 +359,30 @@ function TripPage() {
     setExpenses(data || [])
   }
 
+  const toggleStepComplete = async (stepId: string, current: boolean) => {
+    await supabase.from('steps').update({ completed: !current }).eq('id', stepId)
+    fetchSteps()
+  }
+
   const addStep = async () => {
     if (!stepName || addingStep) return
     setAddingStep(true)
-
     let finalLat: number, finalLng: number
-
     if (pickedCoords) {
-      finalLat = pickedCoords.lat
-      finalLng = pickedCoords.lng
+      finalLat = pickedCoords.lat; finalLng = pickedCoords.lng
     } else {
       const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(stepName)}&format=json&limit=1`)
       const geo = await res.json()
       if (!geo || geo.length === 0) { alert('Ville introuvable'); setAddingStep(false); return }
-      finalLat = parseFloat(geo[0].lat)
-      finalLng = parseFloat(geo[0].lon)
+      finalLat = parseFloat(geo[0].lat); finalLng = parseFloat(geo[0].lon)
     }
-
     let transitLat = null, transitLng = null, transitName = null
     let transitDepartureLat = null, transitDepartureLng = null, transitDepartureName = null
-
     if (transportMode === 'plane') {
       transitDepartureLat = CDG.lat; transitDepartureLng = CDG.lng; transitDepartureName = CDG.name
       const arrAirport = await findNearestAirport(stepName)
       if (arrAirport) { transitLat = arrAirport.lat; transitLng = arrAirport.lng; transitName = arrAirport.name }
     }
-
     if (transportMode === 'ferry') {
       const arrTerminal = await findNearestFerryTerminal(stepName)
       if (arrTerminal) { transitLat = arrTerminal.lat; transitLng = arrTerminal.lng; transitName = arrTerminal.name }
@@ -210,14 +392,13 @@ function TripPage() {
         if (depTerminal) { transitDepartureLat = depTerminal.lat; transitDepartureLng = depTerminal.lng; transitDepartureName = depTerminal.name }
       }
     }
-
     await supabase.from('steps').insert({
       trip_id: id, name: stepName, latitude: finalLat, longitude: finalLng,
       order_index: steps.length, transport_mode: transportMode,
       transit_lat: transitLat, transit_lng: transitLng, transit_name: transitName,
-      transit_departure_lat: transitDepartureLat, transit_departure_lng: transitDepartureLng, transit_departure_name: transitDepartureName,
+      transit_departure_lat: transitDepartureLat, transit_departure_lng: transitDepartureLng,
+      transit_departure_name: transitDepartureName, completed: false,
     })
-
     setStepName(''); setTransportMode('driving'); setShowStepForm(false)
     setAddingStep(false); setPickedCoords(null); setPickMode(false)
     fetchSteps()
@@ -226,20 +407,16 @@ function TripPage() {
   const updateStep = async (stepId: string) => {
     if (!editingStepName || addingStep) return
     setAddingStep(true)
-
     const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(editingStepName)}&format=json&limit=1`)
     const geo = await res.json()
     if (!geo || geo.length === 0) { alert('Ville introuvable'); setAddingStep(false); return }
-
     let transitLat = null, transitLng = null, transitName = null
     let transitDepartureLat = null, transitDepartureLng = null, transitDepartureName = null
-
     if (editingTransportMode === 'plane') {
       transitDepartureLat = CDG.lat; transitDepartureLng = CDG.lng; transitDepartureName = CDG.name
       const arrAirport = await findNearestAirport(editingStepName)
       if (arrAirport) { transitLat = arrAirport.lat; transitLng = arrAirport.lng; transitName = arrAirport.name }
     }
-
     if (editingTransportMode === 'ferry') {
       const arrTerminal = await findNearestFerryTerminal(editingStepName)
       if (arrTerminal) { transitLat = arrTerminal.lat; transitLng = arrTerminal.lng; transitName = arrTerminal.name }
@@ -250,14 +427,13 @@ function TripPage() {
         if (depTerminal) { transitDepartureLat = depTerminal.lat; transitDepartureLng = depTerminal.lng; transitDepartureName = depTerminal.name }
       }
     }
-
     await supabase.from('steps').update({
       name: editingStepName, latitude: parseFloat(geo[0].lat), longitude: parseFloat(geo[0].lon),
       transport_mode: editingTransportMode,
       transit_lat: transitLat, transit_lng: transitLng, transit_name: transitName,
-      transit_departure_lat: transitDepartureLat, transit_departure_lng: transitDepartureLng, transit_departure_name: transitDepartureName,
+      transit_departure_lat: transitDepartureLat, transit_departure_lng: transitDepartureLng,
+      transit_departure_name: transitDepartureName,
     }).eq('id', stepId)
-
     setEditingStepId(null); setEditingStepName(''); setEditingTransportMode('driving')
     setAddingStep(false); fetchSteps()
   }
@@ -293,6 +469,9 @@ function TripPage() {
     return acc
   }, {} as Record<string, number>)
 
+  const allCompleted = steps.length > 0 && steps.every(s => s.completed)
+  const completedCount = steps.filter(s => s.completed).length
+
   useEffect(() => { if (id) { fetchTrip(); fetchSteps() } }, [id])
   useEffect(() => { if (steps.length > 0) fetchExpenses() }, [steps])
 
@@ -305,34 +484,23 @@ function TripPage() {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap');
-
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'DM Sans', sans-serif; background: #f7f4ef; color: #1a1612; }
         .trip-page { min-height: 100vh; }
-
         .trip-hero { position: relative; height: 280px; background: #1a1612; overflow: hidden; }
         .trip-hero-img { width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
         .trip-hero-overlay {
           position: absolute; inset: 0;
           background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%);
-          display: flex; flex-direction: column;
-          justify-content: space-between; padding: 1.5rem 3rem;
+          display: flex; flex-direction: column; justify-content: space-between; padding: 1.5rem 3rem;
         }
-
         .navbar { display: flex; align-items: center; justify-content: space-between; }
         .nav-logo { font-family: 'Playfair Display', serif; font-size: 1.1rem; letter-spacing: 0.2em; text-transform: uppercase; color: #d4af37; cursor: pointer; }
-        .btn-back {
-          background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
-          color: #fff; padding: 0.5rem 1rem; border-radius: 4px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.8rem;
-          cursor: pointer; transition: all 0.2s; backdrop-filter: blur(10px);
-        }
+        .btn-back { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 0.5rem 1rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; backdrop-filter: blur(10px); }
         .btn-back:hover { background: rgba(255,255,255,0.2); }
-
         .trip-title { font-family: 'Playfair Display', serif; font-size: 2.75rem; color: #fff; line-height: 1.1; margin-bottom: 0.4rem; }
         .trip-desc { font-size: 0.9rem; color: rgba(255,255,255,0.7); }
         .trip-content { max-width: 1300px; margin: 0 auto; padding: 2rem 3rem; }
-
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
         .stat-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 1.25rem; }
         .stat-label { font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; color: #8a8070; margin-bottom: 0.4rem; }
@@ -340,117 +508,54 @@ function TripPage() {
         .stat-value.gold { color: #d4af37; }
         .stat-value.green { color: #6a9e7f; }
         .stat-value.red { color: #c07060; }
-
         .budget-section { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; }
         .budget-section-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; margin-bottom: 1.25rem; }
         .budget-bar-track { height: 8px; background: #f0ebe0; border-radius: 4px; overflow: hidden; margin-bottom: 0.75rem; }
         .budget-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
         .budget-bar-labels { display: flex; justify-content: space-between; font-size: 0.8rem; color: #8a8070; }
-
-        .category-grid {
-          display: grid; grid-template-columns: repeat(5, 1fr);
-          gap: 0.75rem; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #f0ebe0;
-        }
+        .category-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #f0ebe0; }
         .category-item { text-align: center; }
         .category-emoji { font-size: 1.25rem; margin-bottom: 0.25rem; }
         .category-name { font-size: 0.7rem; color: #8a8070; margin-bottom: 0.2rem; text-transform: capitalize; }
         .category-amount { font-size: 0.85rem; font-weight: 500; color: #1a1612; }
-
-        /* NOUVEAU LAYOUT CARTE + ÉTAPES */
-        .itinerary-layout {
-          display: grid;
-          grid-template-columns: 1fr 420px;
-          gap: 1.5rem;
-          align-items: start;
-        }
-
-        .map-column {
-          position: sticky;
-          top: 1.5rem;
-        }
-
+        .itinerary-layout { display: grid; grid-template-columns: 1fr 420px; gap: 1.5rem; align-items: start; }
+        .map-column { position: sticky; top: 1.5rem; }
         .map-section { border-radius: 12px; overflow: hidden; border: 1px solid #e8e0d0; margin-bottom: 1rem; }
-
         .steps-column { display: flex; flex-direction: column; gap: 0; }
-
         .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
         .section-title { font-family: 'Playfair Display', serif; font-size: 1.5rem; }
-
-        .btn-primary {
-          background: #0a0a0a; color: #f5f0e8; border: none;
-          padding: 0.75rem 1.5rem; border-radius: 4px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
-          font-weight: 500; cursor: pointer; transition: all 0.2s; letter-spacing: 0.05em;
-        }
+        .btn-primary { background: #0a0a0a; color: #f5f0e8; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s; letter-spacing: 0.05em; }
         .btn-primary:hover { background: #d4af37; color: #0a0a0a; }
         .btn-primary:disabled { background: #8a8070; cursor: not-allowed; }
-
         .form-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
-
-        .form-input {
-          width: 100%; background: #f7f4ef; border: 1px solid #e8e0d0;
-          border-radius: 4px; padding: 0.75rem 1rem;
-          font-family: 'DM Sans', sans-serif; font-size: 0.9rem;
-          color: #1a1612; outline: none; transition: border-color 0.2s; margin-bottom: 0.75rem;
-        }
+        .form-input { width: 100%; background: #f7f4ef; border: 1px solid #e8e0d0; border-radius: 4px; padding: 0.75rem 1rem; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; color: #1a1612; outline: none; transition: border-color 0.2s; margin-bottom: 0.75rem; }
         .form-input:focus { border-color: #d4af37; background: #fff; }
         .form-actions { display: flex; gap: 0.75rem; margin-top: 0.75rem; }
-
-        .btn-secondary {
-          background: transparent; border: 1px solid #e8e0d0; color: #8a8070;
-          padding: 0.75rem 1.5rem; border-radius: 4px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.85rem; cursor: pointer; transition: all 0.2s;
-        }
+        .btn-secondary { background: transparent; border: 1px solid #e8e0d0; color: #8a8070; padding: 0.75rem 1.5rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
         .btn-secondary:hover { border-color: #1a1612; color: #1a1612; }
-
         .transport-selector { margin-bottom: 0.75rem; }
         .transport-label { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: #8a8070; display: block; margin-bottom: 0.5rem; }
         .transport-options { display: flex; gap: 0.5rem; flex-wrap: wrap; }
         .loading-indicator { font-size: 0.85rem; color: #8a8070; font-style: italic; margin-top: 0.5rem; }
-
         .steps-list { display: flex; flex-direction: column; gap: 0.75rem; }
         .step-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; overflow: hidden; transition: border-color 0.2s; }
         .step-card:hover { border-color: #d4af37; }
-
         .step-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; }
         .step-left { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
-        .step-number {
-          width: 28px; height: 28px; background: #0a0a0a; color: #d4af37;
-          border-radius: 50%; display: flex; align-items: center; justify-content: center;
-          font-size: 0.7rem; font-weight: 500; flex-shrink: 0;
-        }
+        .step-number { width: 28px; height: 28px; background: #0a0a0a; color: #d4af37; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 500; flex-shrink: 0; }
         .step-name { font-family: 'Playfair Display', serif; font-size: 1rem; color: #1a1612; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .step-mode { font-size: 0.7rem; color: #8a8070; margin-top: 0.15rem; }
         .step-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
         .step-total { font-size: 0.85rem; font-weight: 500; color: #d4af37; }
-
-        .btn-add-expense {
-          background: #f7f4ef; border: 1px solid #e8e0d0; color: #1a1612;
-          padding: 0.35rem 0.7rem; border-radius: 4px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.7rem; cursor: pointer; transition: all 0.2s;
-        }
+        .btn-add-expense { background: #f7f4ef; border: 1px solid #e8e0d0; color: #1a1612; padding: 0.35rem 0.7rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.7rem; cursor: pointer; transition: all 0.2s; }
         .btn-add-expense:hover { background: #0a0a0a; color: #d4af37; border-color: #0a0a0a; }
-
         .btn-delete-step { background: transparent; border: none; color: #c0a090; font-size: 0.7rem; cursor: pointer; padding: 0.3rem; transition: color 0.2s; }
         .btn-delete-step:hover { color: #c07060; }
-
         .expense-form { background: #f7f4ef; padding: 1rem 1.25rem; border-top: 1px solid #e8e0d0; }
         .expense-form-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
-
-        .form-select {
-          background: #fff; border: 1px solid #e8e0d0; border-radius: 4px;
-          padding: 0.6rem 0.75rem; font-family: 'DM Sans', sans-serif;
-          font-size: 0.8rem; color: #1a1612; outline: none; flex: 1;
-        }
-
-        .btn-add {
-          background: #0a0a0a; color: #f5f0e8; border: none;
-          padding: 0.6rem 1rem; border-radius: 4px;
-          font-family: 'DM Sans', sans-serif; font-size: 0.75rem;
-          cursor: pointer; transition: all 0.2s; white-space: nowrap;
-        }
+        .form-select { background: #fff; border: 1px solid #e8e0d0; border-radius: 4px; padding: 0.6rem 0.75rem; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; color: #1a1612; outline: none; flex: 1; }
+        .btn-add { background: #0a0a0a; color: #f5f0e8; border: none; padding: 0.6rem 1rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
         .btn-add:hover { background: #d4af37; color: #0a0a0a; }
-
         .expenses-list { padding: 0 1.25rem 1rem; display: flex; flex-direction: column; gap: 0.4rem; }
         .expense-item { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: #f7f4ef; border-radius: 4px; }
         .expense-left { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
@@ -458,12 +563,12 @@ function TripPage() {
         .expense-label { font-size: 0.8rem; color: #1a1612; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .expense-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
         .expense-amount { font-size: 0.8rem; font-weight: 500; color: #1a1612; }
-
         .btn-delete-expense { background: transparent; border: none; color: #c0a090; font-size: 0.65rem; cursor: pointer; transition: color 0.2s; padding: 0.2rem; }
         .btn-delete-expense:hover { color: #c07060; }
-
         .empty-state { text-align: center; padding: 4rem 2rem; color: #8a8070; }
         .empty-title { font-family: 'Playfair Display', serif; font-size: 1.75rem; color: #1a1612; margin-bottom: 0.5rem; }
+        .progress-bar-track { height: 6px; background: #f0ebe0; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
+        .progress-bar-fill { height: 100%; background: #6a9e7f; border-radius: 4px; transition: width 0.4s ease; }
       `}</style>
 
       <div className="trip-page">
@@ -530,9 +635,28 @@ function TripPage() {
                 </div>
               )}
 
-              <div className="itinerary-layout">
+              {/* Bandeau voyage terminé */}
+              {allCompleted && (
+                <div style={{
+                  background: 'linear-gradient(135deg, #6a9e7f, #4a8a6a)',
+                  color: '#fff', borderRadius: '8px',
+                  padding: '1.25rem 1.5rem', marginBottom: '1.5rem',
+                  display: 'flex', alignItems: 'center', gap: '1rem',
+                  boxShadow: '0 4px 20px rgba(106,158,127,0.3)',
+                }}>
+                  <span style={{ fontSize: '2rem' }}>🎉</span>
+                  <div>
+                    <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.2rem', fontWeight: 700 }}>
+                      Voyage terminé !
+                    </div>
+                    <div style={{ fontSize: '0.82rem', opacity: 0.9, marginTop: '0.2rem' }}>
+                      Toutes les {steps.length} étapes ont été validées. Bravo !
+                    </div>
+                  </div>
+                </div>
+              )}
 
-                {/* COLONNE GAUCHE — carte sticky */}
+              <div className="itinerary-layout">
                 <div className="map-column">
                   <div className="map-section">
                     <Map
@@ -548,10 +672,21 @@ function TripPage() {
                   </div>
                 </div>
 
-                {/* COLONNE DROITE — étapes */}
                 <div className="steps-column">
                   <div className="section-header">
-                    <h2 className="section-title">Itinéraire</h2>
+                    <div>
+                      <h2 className="section-title">Itinéraire</h2>
+                      {steps.length > 0 && (
+                        <div style={{ fontSize: '0.75rem', color: '#8a8070', marginTop: '0.2rem' }}>
+                          {completedCount}/{steps.length} étapes validées
+                        </div>
+                      )}
+                      {steps.length > 0 && (
+                        <div className="progress-bar-track" style={{ width: '120px' }}>
+                          <div className="progress-bar-fill" style={{ width: `${(completedCount / steps.length) * 100}%` }} />
+                        </div>
+                      )}
+                    </div>
                     <button className="btn-primary" onClick={() => { setShowStepForm(!showStepForm); setPickMode(false); setPickedCoords(null) }}>
                       + Étape
                     </button>
@@ -629,132 +764,43 @@ function TripPage() {
                       <p>Ajoute ta première destination.</p>
                     </div>
                   ) : (
-                    <div className="steps-list">
-                      {steps.map((step, index) => {
-                        const stepExpenses = expenses.filter(e => e.step_id === step.id)
-                        const stepTotal = stepExpenses.reduce((sum, e) => sum + e.amount, 0)
-
-                        return (
-                          <div key={step.id} className="step-card">
-                            <div className="step-header">
-                              <div className="step-left">
-                                <div className="step-number">{index + 1}</div>
-                                <div style={{ minWidth: 0 }}>
-                                  <div className="step-name">{step.name}</div>
-                                  {step.transport_mode && step.transport_mode !== 'driving' && (
-                                    <div className="step-mode">
-                                      {modeEmoji[step.transport_mode]} {step.transport_mode === 'plane' ? 'Avion' : 'Ferry'}
-                                      {step.transit_name && ` → ${step.transit_name}`}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="step-right">
-                                {stepTotal > 0 && <span className="step-total">{stepTotal.toFixed(0)} €</span>}
-                                <button className="btn-add-expense" onClick={() => setActiveStepId(activeStepId === step.id ? null : step.id)}>+ €</button>
-                                <button className="btn-add-expense" onClick={() => {
-                                  setEditingStepId(step.id)
-                                  setEditingStepName(step.name)
-                                  setEditingTransportMode(step.transport_mode || 'driving')
-                                }}>✏</button>
-                                <button className="btn-delete-step" onClick={() => deleteStep(step.id)}>✕</button>
-                              </div>
-                            </div>
-
-                            {editingStepId === step.id && (
-                              <div className="expense-form">
-                                <input
-                                  className="form-input"
-                                  type="text"
-                                  placeholder="Nouveau nom..."
-                                  value={editingStepName}
-                                  onChange={e => setEditingStepName(e.target.value)}
-                                />
-                                <div className="transport-selector">
-                                  <label className="transport-label">Transport</label>
-                                  <div className="transport-options">
-                                    {[
-                                      { value: 'driving', label: '🚗' },
-                                      { value: 'plane', label: '✈️' },
-                                      { value: 'ferry', label: '⛴️' },
-                                    ].map(mode => (
-                                      <button
-                                        key={mode.value}
-                                        onClick={() => setEditingTransportMode(mode.value)}
-                                        style={{
-                                          padding: '0.4rem 0.75rem', borderRadius: '4px',
-                                          border: `1px solid ${editingTransportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`,
-                                          background: editingTransportMode === mode.value ? '#0a0a0a' : '#fff',
-                                          color: editingTransportMode === mode.value ? '#d4af37' : '#8a8070',
-                                          fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem',
-                                          cursor: 'pointer', transition: 'all 0.2s',
-                                        }}
-                                      >
-                                        {mode.label}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                                {addingStep && <p style={{ fontSize: '0.75rem', color: '#8a8070', fontStyle: 'italic', margin: '0.4rem 0' }}>🔍 Recherche...</p>}
-                                <div className="form-actions">
-                                  <button className="btn-primary" onClick={() => updateStep(step.id)} disabled={addingStep}>
-                                    {addingStep ? '...' : 'Enregistrer'}
-                                  </button>
-                                  <button className="btn-secondary" onClick={() => setEditingStepId(null)}>Annuler</button>
-                                </div>
-                              </div>
-                            )}
-
-                            {activeStepId === step.id && (
-                              <div className="expense-form">
-                                <input
-                                  className="form-input"
-                                  type="text"
-                                  placeholder="Libellé..."
-                                  value={expenseLabel}
-                                  onChange={e => setExpenseLabel(e.target.value)}
-                                />
-                                <div className="expense-form-row">
-                                  <input
-                                    className="form-input"
-                                    style={{ margin: 0, flex: 1 }}
-                                    type="number"
-                                    placeholder="Montant €"
-                                    value={expenseAmount}
-                                    onChange={e => setExpenseAmount(e.target.value)}
-                                  />
-                                  <select className="form-select" value={expenseCategory} onChange={e => setExpenseCategory(e.target.value)}>
-                                    <option value="transport">🚗</option>
-                                    <option value="hébergement">🏨</option>
-                                    <option value="nourriture">🍽️</option>
-                                    <option value="activités">🎯</option>
-                                    <option value="autre">💼</option>
-                                  </select>
-                                  <button className="btn-add" onClick={() => addExpense(step.id)}>+</button>
-                                </div>
-                              </div>
-                            )}
-
-                            {stepExpenses.length > 0 && (
-                              <div className="expenses-list">
-                                {stepExpenses.map(expense => (
-                                  <div key={expense.id} className="expense-item">
-                                    <div className="expense-left">
-                                      <span className="expense-emoji">{categoryEmoji[expense.category] || '💼'}</span>
-                                      <span className="expense-label">{expense.label}</span>
-                                    </div>
-                                    <div className="expense-right">
-                                      <span className="expense-amount">{expense.amount.toFixed(2)} €</span>
-                                      <button className="btn-delete-expense" onClick={() => deleteExpense(expense.id)}>✕</button>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                      <SortableContext items={steps.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                        <div className="steps-list">
+                          {steps.map((step, index) => (
+                            <SortableStepCard
+                              key={step.id}
+                              step={step}
+                              index={index}
+                              expenses={expenses}
+                              activeStepId={activeStepId}
+                              editingStepId={editingStepId}
+                              editingStepName={editingStepName}
+                              editingTransportMode={editingTransportMode}
+                              addingStep={addingStep}
+                              expenseLabel={expenseLabel}
+                              expenseAmount={expenseAmount}
+                              expenseCategory={expenseCategory}
+                              modeEmoji={modeEmoji}
+                              categoryEmoji={categoryEmoji}
+                              onToggleExpense={(sid: string) => setActiveStepId(activeStepId === sid ? null : sid)}
+                              onStartEdit={(s: Step) => { setEditingStepId(s.id); setEditingStepName(s.name); setEditingTransportMode(s.transport_mode || 'driving') }}
+                              onDelete={deleteStep}
+                              onToggleComplete={toggleStepComplete}
+                              onEditNameChange={setEditingStepName}
+                              onEditModeChange={setEditingTransportMode}
+                              onUpdateStep={updateStep}
+                              onCancelEdit={() => setEditingStepId(null)}
+                              onExpenseLabelChange={setExpenseLabel}
+                              onExpenseAmountChange={setExpenseAmount}
+                              onExpenseCategoryChange={setExpenseCategory}
+                              onAddExpense={addExpense}
+                              onDeleteExpense={deleteExpense}
+                            />
+                          ))}
+                        </div>
+                      </SortableContext>
+                    </DndContext>
                   )}
                 </div>
               </div>
