@@ -33,7 +33,7 @@ export default function Home() {
     }
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/dashboard` }
+      options: { redirectTo: `https://roadtrip-jade.vercel.app/dashboard` }
     })
   }
 
