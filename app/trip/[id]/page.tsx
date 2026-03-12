@@ -323,7 +323,8 @@ function TripPage() {
   const [expenseCategory, setExpenseCategory] = useState('transport')
   const [pickMode, setPickMode] = useState(false)
   const [pickedCoords, setPickedCoords] = useState<{ lat: number, lng: number } | null>(null)
-
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [editingTitleValue, setEditingTitleValue] = useState('')
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -339,6 +340,13 @@ function TripPage() {
     await Promise.all(newSteps.map((step, i) =>
       supabase.from('steps').update({ order_index: i }).eq('id', step.id)
     ))
+  }
+
+  const updateTripName = async () => {
+    if (!editingTitleValue.trim()) return
+    await supabase.from('trips').update({ name: editingTitleValue }).eq('id', id)
+    setTrip(t => t ? { ...t, name: editingTitleValue } : t)
+    setEditingTitle(false)
   }
 
   const fetchTrip = async () => {
@@ -581,10 +589,47 @@ function TripPage() {
                   <div className="nav-logo" onClick={() => router.push('/dashboard')}>Roadtrip</div>
                   <button className="btn-back" onClick={() => router.push('/dashboard')}>← Mes voyages</button>
                 </nav>
-                <div>
-                  <h1 className="trip-title">{trip.name}</h1>
-                  {trip.description && <p className="trip-desc">{trip.description}</p>}
+            <div>
+              {editingTitle ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <input
+                    autoFocus
+                    value={editingTitleValue}
+                    onChange={e => setEditingTitleValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') updateTripName(); if (e.key === 'Escape') setEditingTitle(false) }}
+                    style={{
+                      fontFamily: 'Playfair Display, serif', fontSize: '2.75rem',
+                      background: 'transparent', border: 'none',
+                      borderBottom: '2px solid #d4af37', color: '#fff',
+                      outline: 'none', lineHeight: 1.1, width: '100%',
+                    }}
+                  />
+                  <button onClick={updateTripName} style={{ background: '#d4af37', border: 'none', color: '#0a0a0a', padding: '0.4rem 0.85rem', borderRadius: '4px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                    ✓ OK
+                  </button>
+                  <button onClick={() => setEditingTitle(false)} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '0.4rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                    ✕
+                  </button>
                 </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <h1 className="trip-title">{trip.name}</h1>
+                  <button
+                    onClick={() => { setEditingTitle(true); setEditingTitleValue(trip.name) }}
+                    style={{
+                      background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+                      color: 'rgba(255,255,255,0.6)', padding: '0.3rem 0.6rem',
+                      borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem',
+                      transition: 'all 0.2s', backdropFilter: 'blur(10px)',
+                    }}
+                    title="Modifier le nom"
+                  >
+                     ✏
+                   </button>
+                 </div>
+              )}
+               {trip.description && <p className="trip-desc">{trip.description}</p>}
+              </div>
               </div>
             </div>
 
