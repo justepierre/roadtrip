@@ -130,7 +130,7 @@ async function findNearestFerryTerminal(cityName: string): Promise<{ lat: number
 function SortableStepCard({
   step, index, expenses, activeStepId, editingStepId, editingStepName,
   editingTransportMode, addingStep, expenseLabel, expenseAmount, expenseCategory,
-  modeEmoji, categoryEmoji,
+  modeEmoji, categoryEmoji, weather,
   onToggleExpense, onStartEdit, onDelete, onToggleComplete,
   onEditNameChange, onEditModeChange, onUpdateStep, onCancelEdit,
   onExpenseLabelChange, onExpenseAmountChange, onExpenseCategoryChange,
@@ -139,7 +139,15 @@ function SortableStepCard({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id })
   const stepExpenses = expenses.filter((e: Expense) => e.step_id === step.id)
   const stepTotal = stepExpenses.reduce((sum: number, e: Expense) => sum + e.amount, 0)
-
+  const weatherEmoji = (code: number) => {
+    if (code === 0) return '☀️'
+    if (code <= 2) return '⛅'
+    if (code <= 49) return '🌫️'
+    if (code <= 67) return '🌧️'
+    if (code <= 77) return '❄️'
+    if (code <= 82) return '🌦️'
+    return '⛈️'
+  }
   return (
     <div
       ref={setNodeRef}
@@ -148,7 +156,7 @@ function SortableStepCard({
     >
       <div className="step-header">
         <div className="step-left">
-          {/* Poignée drag */}
+          {}
           <div
             {...attributes}
             {...listeners}
@@ -163,7 +171,7 @@ function SortableStepCard({
             ⠿
           </div>
 
-          {/* Coche de validation */}
+          {}
           <div
             onClick={() => onToggleComplete(step.id, step.completed)}
             title={step.completed ? 'Marquer comme non complété' : 'Marquer comme complété'}
@@ -193,6 +201,11 @@ function SortableStepCard({
             </div>
             {step.transport_mode && step.transport_mode !== 'driving' && (
               <div className="step-mode">
+                {weather && (
+                  <div style={{ fontSize: '0.7rem', color: '#8a8070', marginTop: '0.15rem' }}>
+                    {weatherEmoji(weather.code)} {weather.temp}°C
+                  </div>
+                )}
                 {modeEmoji[step.transport_mode]} {step.transport_mode === 'plane' ? 'Avion' : 'Ferry'}
                 {step.transit_name && ` → ${step.transit_name}`}
               </div>
@@ -324,12 +337,46 @@ function TripPage() {
   const [pickMode, setPickMode] = useState(false)
   const [pickedCoords, setPickedCoords] = useState<{ lat: number, lng: number } | null>(null)
   const [editingTitle, setEditingTitle] = useState(false)
+  interface Weather {
+    temp: number
+    code: number
+  }
+
+  const [stepWeather, setStepWeather] = useState<Record<string, Weather>>({})
   const [editingTitleValue, setEditingTitleValue] = useState('')
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
+  const fetchWeatherForSteps = async (stepsData: Step[], startDate: string) => {
+    if (!startDate) return
+    const today = new Date()
+    const start = new Date(startDate)
+    const diffDays = Math.ceil((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    if (diffDays > 14 || diffDays < -1) return // hors fenêtre météo
+
+    const weather: Record<string, Weather> = {}
+    await Promise.all(stepsData.map(async (step, i) => {
+      try {
+        const date = new Date(start)
+        date.setDate(date.getDate() + i)
+        const dateStr = date.toISOString().split('T')[0]
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${step.latitude}&longitude=${step.longitude}&daily=temperature_2m_max,weathercode&timezone=auto&start_date=${dateStr}&end_date=${dateStr}`
+        )
+        const data = await res.json()
+        if (data.daily?.temperature_2m_max?.[0] !== undefined) {
+          weather[step.id] = {
+            temp: Math.round(data.daily.temperature_2m_max[0]),
+            code: data.daily.weathercode[0],
+          }
+        }
+      } catch {}
+    }))
+    setStepWeather(weather)
+  }
+  
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -481,7 +528,12 @@ function TripPage() {
   const completedCount = steps.filter(s => s.completed).length
 
   useEffect(() => { if (id) { fetchTrip(); fetchSteps() } }, [id])
-  useEffect(() => { if (steps.length > 0) fetchExpenses() }, [steps])
+  useEffect(() => {
+    if (steps.length > 0) {
+      fetchExpenses()
+      if (trip) fetchWeatherForSteps(steps, trip.start_date)
+    }
+  }, [steps, trip])
 
   const categoryEmoji: Record<string, string> = {
     transport: '🚗', hébergement: '🏨', nourriture: '🍽️', activités: '🎯', autre: '💼'
@@ -814,6 +866,7 @@ function TripPage() {
                         <div className="steps-list">
                           {steps.map((step, index) => (
                             <SortableStepCard
+                              weather={stepWeather[step.id]}
                               key={step.id}
                               step={step}
                               index={index}
