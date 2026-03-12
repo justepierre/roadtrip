@@ -199,17 +199,17 @@ function SortableStepCard({
             >
               {step.name}
             </div>
-            {step.transport_mode && step.transport_mode !== 'driving' && (
-              <div className="step-mode">
-                {weather && (
-                  <div style={{ fontSize: '0.7rem', color: '#8a8070', marginTop: '0.15rem' }}>
-                    {weatherEmoji(weather.code)} {weather.temp}°C
-                  </div>
-                )}
-                {modeEmoji[step.transport_mode]} {step.transport_mode === 'plane' ? 'Avion' : 'Ferry'}
-                {step.transit_name && ` → ${step.transit_name}`}
-              </div>
-            )}
+          {weather && (
+            <div style={{ fontSize: '0.7rem', color: '#8a8070', marginTop: '0.15rem' }}>
+              {weatherEmoji(weather.code)} {weather.temp}°C
+            </div>
+          )}
+          {step.transport_mode && step.transport_mode !== 'driving' && (
+            <div className="step-mode">
+              {modeEmoji[step.transport_mode]} {step.transport_mode === 'plane' ? 'Avion' : 'Ferry'}
+              {step.transit_name && ` → ${step.transit_name}`}
+            </div>
+          )}
           </div>
         </div>
 
