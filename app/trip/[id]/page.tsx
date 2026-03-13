@@ -30,6 +30,11 @@ interface Step {
 
 interface Expense {
   id: string; step_id: string; label: string; amount: number; category: string
+  paid_by?: string; paid_by_name?: string
+}
+
+interface Member {
+  user_id: string; display_name: string; email: string; role: string
 }
 
 const CDG = { lat: 49.0097, lng: 2.5479, name: 'Aéroport Paris CDG' }
@@ -130,11 +135,12 @@ async function findNearestFerryTerminal(cityName: string): Promise<{ lat: number
 function SortableStepCard({
   step, index, expenses, activeStepId, editingStepId, editingStepName,
   editingTransportMode, addingStep, expenseLabel, expenseAmount, expenseCategory,
+  expensePaidBy, members, currentUserId,
   modeEmoji, categoryEmoji, weather,
   onToggleExpense, onStartEdit, onDelete, onToggleComplete,
   onEditNameChange, onEditModeChange, onUpdateStep, onCancelEdit,
   onExpenseLabelChange, onExpenseAmountChange, onExpenseCategoryChange,
-  onAddExpense, onDeleteExpense,
+  onExpensePaidByChange, onAddExpense, onDeleteExpense,
 }: any) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id })
   const stepExpenses = expenses.filter((e: Expense) => e.step_id === step.id)
@@ -156,7 +162,6 @@ function SortableStepCard({
     >
       <div className="step-header">
         <div className="step-left">
-          {}
           <div
             {...attributes}
             {...listeners}
@@ -166,15 +171,9 @@ function SortableStepCard({
               padding: '0 0.3rem', flexShrink: 0,
               touchAction: 'none', userSelect: 'none',
             }}
-            title="Glisser pour réordonner"
-          >
-            ⠿
-          </div>
-
-          {}
+          >⠿</div>
           <div
             onClick={() => onToggleComplete(step.id, step.completed)}
-            title={step.completed ? 'Marquer comme non complété' : 'Marquer comme complété'}
             style={{
               width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
               border: `2px solid ${step.completed ? '#6a9e7f' : '#e8e0d0'}`,
@@ -183,36 +182,25 @@ function SortableStepCard({
               cursor: 'pointer', transition: 'all 0.2s',
               fontSize: '0.65rem', color: '#fff',
             }}
-          >
-            {step.completed ? '✓' : ''}
-          </div>
-
+          >{step.completed ? '✓' : ''}</div>
           <div className="step-number">{index + 1}</div>
           <div style={{ minWidth: 0 }}>
-            <div
-              className="step-name"
-              style={{
-                textDecoration: step.completed ? 'line-through' : 'none',
-                opacity: step.completed ? 0.45 : 1,
-                transition: 'all 0.2s',
-              }}
-            >
+            <div className="step-name" style={{ textDecoration: step.completed ? 'line-through' : 'none', opacity: step.completed ? 0.45 : 1, transition: 'all 0.2s' }}>
               {step.name}
             </div>
-          {weather && (
-            <div style={{ fontSize: '0.7rem', color: '#8a8070', marginTop: '0.15rem' }}>
-              {weatherEmoji(weather.code)} {weather.temp}°C
-            </div>
-          )}
-          {step.transport_mode && step.transport_mode !== 'driving' && (
-            <div className="step-mode">
-              {modeEmoji[step.transport_mode]} {step.transport_mode === 'plane' ? 'Avion' : 'Ferry'}
-              {step.transit_name && ` → ${step.transit_name}`}
-            </div>
-          )}
+            {weather && (
+              <div style={{ fontSize: '0.7rem', color: '#8a8070', marginTop: '0.15rem' }}>
+                {weatherEmoji(weather.code)} {weather.temp}°C
+              </div>
+            )}
+            {step.transport_mode && step.transport_mode !== 'driving' && (
+              <div className="step-mode">
+                {modeEmoji[step.transport_mode]} {step.transport_mode === 'plane' ? 'Avion' : 'Ferry'}
+                {step.transit_name && ` → ${step.transit_name}`}
+              </div>
+            )}
           </div>
         </div>
-
         <div className="step-right">
           {stepTotal > 0 && <span className="step-total">{stepTotal.toFixed(0)} €</span>}
           <button className="btn-add-expense" onClick={() => onToggleExpense(step.id)}>+ €</button>
@@ -223,33 +211,12 @@ function SortableStepCard({
 
       {editingStepId === step.id && (
         <div className="expense-form">
-          <input
-            className="form-input"
-            type="text"
-            placeholder="Nouveau nom..."
-            value={editingStepName}
-            onChange={e => onEditNameChange(e.target.value)}
-          />
+          <input className="form-input" type="text" placeholder="Nouveau nom..." value={editingStepName} onChange={e => onEditNameChange(e.target.value)} />
           <div className="transport-selector">
             <label className="transport-label">Transport</label>
             <div className="transport-options">
-              {[
-                { value: 'driving', label: '🚗' },
-                { value: 'plane', label: '✈️' },
-                { value: 'ferry', label: '⛴️' },
-              ].map(mode => (
-                <button
-                  key={mode.value}
-                  onClick={() => onEditModeChange(mode.value)}
-                  style={{
-                    padding: '0.4rem 0.75rem', borderRadius: '4px',
-                    border: `1px solid ${editingTransportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`,
-                    background: editingTransportMode === mode.value ? '#0a0a0a' : '#fff',
-                    color: editingTransportMode === mode.value ? '#d4af37' : '#8a8070',
-                    fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem',
-                    cursor: 'pointer', transition: 'all 0.2s',
-                  }}
-                >
+              {[{ value: 'driving', label: '🚗' }, { value: 'plane', label: '✈️' }, { value: 'ferry', label: '⛴️' }].map(mode => (
+                <button key={mode.value} onClick={() => onEditModeChange(mode.value)} style={{ padding: '0.4rem 0.75rem', borderRadius: '4px', border: `1px solid ${editingTransportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`, background: editingTransportMode === mode.value ? '#0a0a0a' : '#fff', color: editingTransportMode === mode.value ? '#d4af37' : '#8a8070', fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s' }}>
                   {mode.label}
                 </button>
               ))}
@@ -257,9 +224,7 @@ function SortableStepCard({
           </div>
           {addingStep && <p style={{ fontSize: '0.75rem', color: '#8a8070', fontStyle: 'italic', margin: '0.4rem 0' }}>🔍 Recherche...</p>}
           <div className="form-actions">
-            <button className="btn-primary" onClick={() => onUpdateStep(step.id)} disabled={addingStep}>
-              {addingStep ? '...' : 'Enregistrer'}
-            </button>
+            <button className="btn-primary" onClick={() => onUpdateStep(step.id)} disabled={addingStep}>{addingStep ? '...' : 'Enregistrer'}</button>
             <button className="btn-secondary" onClick={onCancelEdit}>Annuler</button>
           </div>
         </div>
@@ -267,22 +232,9 @@ function SortableStepCard({
 
       {activeStepId === step.id && (
         <div className="expense-form">
-          <input
-            className="form-input"
-            type="text"
-            placeholder="Libellé..."
-            value={expenseLabel}
-            onChange={e => onExpenseLabelChange(e.target.value)}
-          />
+          <input className="form-input" type="text" placeholder="Libellé..." value={expenseLabel} onChange={e => onExpenseLabelChange(e.target.value)} />
           <div className="expense-form-row">
-            <input
-              className="form-input"
-              style={{ margin: 0, flex: 1 }}
-              type="number"
-              placeholder="Montant €"
-              value={expenseAmount}
-              onChange={e => onExpenseAmountChange(e.target.value)}
-            />
+            <input className="form-input" style={{ margin: 0, flex: 1 }} type="number" placeholder="Montant €" value={expenseAmount} onChange={e => onExpenseAmountChange(e.target.value)} />
             <select className="form-select" value={expenseCategory} onChange={e => onExpenseCategoryChange(e.target.value)}>
               <option value="transport">🚗</option>
               <option value="hébergement">🏨</option>
@@ -290,8 +242,30 @@ function SortableStepCard({
               <option value="activités">🎯</option>
               <option value="autre">💼</option>
             </select>
-            <button className="btn-add" onClick={() => onAddExpense(step.id)}>+</button>
           </div>
+          {members.length > 1 && (
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label className="transport-label">Payé par</label>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {members.map((m: Member) => (
+                  <button
+                    key={m.user_id}
+                    onClick={() => onExpensePaidByChange(m.user_id)}
+                    style={{
+                      padding: '0.4rem 0.85rem', borderRadius: '4px', fontSize: '0.78rem',
+                      border: `1px solid ${expensePaidBy === m.user_id ? '#0a0a0a' : '#e8e0d0'}`,
+                      background: expensePaidBy === m.user_id ? '#0a0a0a' : '#fff',
+                      color: expensePaidBy === m.user_id ? '#d4af37' : '#8a8070',
+                      cursor: 'pointer', transition: 'all 0.2s', fontFamily: 'DM Sans, sans-serif',
+                    }}
+                  >
+                    {m.user_id === currentUserId ? 'Moi' : m.display_name || m.email?.split('@')[0]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <button className="btn-add" style={{ width: '100%' }} onClick={() => onAddExpense(step.id)}>+ Ajouter</button>
         </div>
       )}
 
@@ -302,6 +276,11 @@ function SortableStepCard({
               <div className="expense-left">
                 <span className="expense-emoji">{categoryEmoji[expense.category] || '💼'}</span>
                 <span className="expense-label">{expense.label}</span>
+                {expense.paid_by_name && (
+                  <span style={{ fontSize: '0.68rem', color: '#b0a090', background: '#f0ebe0', padding: '0.1rem 0.4rem', borderRadius: '10px', flexShrink: 0 }}>
+                    {expense.paid_by === currentUserId ? 'moi' : expense.paid_by_name}
+                  </span>
+                )}
               </div>
               <div className="expense-right">
                 <span className="expense-amount">{expense.amount.toFixed(2)} €</span>
@@ -322,6 +301,8 @@ function TripPage() {
   const [trip, setTrip] = useState<Trip | null>(null)
   const [steps, setSteps] = useState<Step[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [members, setMembers] = useState<Member[]>([])
+  const [currentUserId, setCurrentUserId] = useState('')
   const [showStepForm, setShowStepForm] = useState(false)
   const [stepName, setStepName] = useState('')
   const [transportMode, setTransportMode] = useState('driving')
@@ -334,49 +315,122 @@ function TripPage() {
   const [expenseLabel, setExpenseLabel] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseCategory, setExpenseCategory] = useState('transport')
+  const [expensePaidBy, setExpensePaidBy] = useState('')
   const [pickMode, setPickMode] = useState(false)
   const [pickedCoords, setPickedCoords] = useState<{ lat: number, lng: number } | null>(null)
   const [editingTitle, setEditingTitle] = useState(false)
-  interface Weather {
-    temp: number
-    code: number
-  }
-
-  const [stepWeather, setStepWeather] = useState<Record<string, Weather>>({})
   const [editingTitleValue, setEditingTitleValue] = useState('')
+  const [showBalances, setShowBalances] = useState(false)
+
+  interface Weather { temp: number; code: number }
+  const [stepWeather, setStepWeather] = useState<Record<string, Weather>>({})
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
+
+  const fetchMembers = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    setCurrentUserId(user.id)
+
+    // Récupère le propriétaire du voyage
+    const { data: tripData } = await supabase.from('trips').select('user_id').eq('id', id).single()
+
+    // Récupère les membres
+    const { data: membersData } = await supabase.from('trip_members').select('*').eq('trip_id', id)
+
+    // Récupère les infos des users via auth
+    const allUserIds = [...new Set([tripData?.user_id, ...(membersData?.map((m: any) => m.user_id) || [])])]
+
+    // Construit la liste des membres avec nom depuis Supabase auth
+    const memberList: Member[] = []
+    for (const uid of allUserIds) {
+      if (!uid) continue
+      const existing = membersData?.find((m: any) => m.user_id === uid)
+      memberList.push({
+        user_id: uid,
+        display_name: existing?.display_name || '',
+        email: existing?.email || (uid === user.id ? user.email || '' : ''),
+        role: uid === tripData?.user_id ? 'owner' : 'member',
+      })
+    }
+
+    // Met à jour le display_name et email du user courant
+    const myIndex = memberList.findIndex(m => m.user_id === user.id)
+    if (myIndex >= 0) {
+      memberList[myIndex].display_name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Moi'
+      memberList[myIndex].email = user.email || ''
+      // Sauvegarde dans trip_members si membre
+      if (memberList[myIndex].role === 'member') {
+        await supabase.from('trip_members').update({
+          display_name: memberList[myIndex].display_name,
+          email: memberList[myIndex].email,
+        }).eq('trip_id', id).eq('user_id', user.id)
+      }
+    }
+
+    setMembers(memberList)
+    setExpensePaidBy(user.id)
+  }
+
+  // Calcul des balances : qui doit quoi à qui
+  const computeBalances = () => {
+    if (members.length < 2) return []
+    const paid: Record<string, number> = {}
+    members.forEach(m => { paid[m.user_id] = 0 })
+    expenses.forEach(e => {
+      if (e.paid_by && paid[e.paid_by] !== undefined) paid[e.paid_by] += e.amount
+    })
+    const total = expenses.reduce((s, e) => s + e.amount, 0)
+    const share = total / members.length
+    const balances = members.map(m => ({ ...m, balance: paid[m.user_id] - share }))
+
+    // Algorithme de simplification des dettes
+    const debts: { from: string, to: string, amount: number }[] = []
+    const creditors = balances.filter(b => b.balance > 0.01).sort((a, b) => b.balance - a.balance)
+    const debtors = balances.filter(b => b.balance < -0.01).sort((a, b) => a.balance - b.balance)
+
+    let i = 0, j = 0
+    const c = creditors.map(x => ({ ...x }))
+    const d = debtors.map(x => ({ ...x }))
+
+    while (i < c.length && j < d.length) {
+      const amount = Math.min(c[i].balance, -d[j].balance)
+      if (amount > 0.01) {
+        debts.push({ from: d[j].user_id, to: c[i].user_id, amount: Math.round(amount * 100) / 100 })
+      }
+      c[i].balance -= amount
+      d[j].balance += amount
+      if (Math.abs(c[i].balance) < 0.01) i++
+      if (Math.abs(d[j].balance) < 0.01) j++
+    }
+    return debts
+  }
 
   const fetchWeatherForSteps = async (stepsData: Step[], startDate: string) => {
     if (!startDate) return
     const today = new Date()
     const start = new Date(startDate)
     const diffDays = Math.ceil((start.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    if (diffDays > 14 || diffDays < -1) return // hors fenêtre météo
-
+    if (diffDays > 14 || diffDays < -1) return
     const weather: Record<string, Weather> = {}
     await Promise.all(stepsData.map(async (step, i) => {
       try {
         const date = new Date(start)
         date.setDate(date.getDate() + i)
         const dateStr = date.toISOString().split('T')[0]
-        const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${step.latitude}&longitude=${step.longitude}&daily=temperature_2m_max,weathercode&timezone=auto&start_date=${dateStr}&end_date=${dateStr}`
-        )
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${step.latitude}&longitude=${step.longitude}&daily=temperature_2m_max,weathercode&timezone=auto&start_date=${dateStr}&end_date=${dateStr}`)
         const data = await res.json()
         if (data.daily?.temperature_2m_max?.[0] !== undefined) {
-          weather[step.id] = {
-            temp: Math.round(data.daily.temperature_2m_max[0]),
-            code: data.daily.weathercode[0],
-          }
+          weather[step.id] = { temp: Math.round(data.daily.temperature_2m_max[0]), code: data.daily.weathercode[0] }
         }
       } catch {}
     }))
     setStepWeather(weather)
   }
-  
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -384,9 +438,7 @@ function TripPage() {
     const newIndex = steps.findIndex(s => s.id === over.id)
     const newSteps = arrayMove(steps, oldIndex, newIndex)
     setSteps(newSteps)
-    await Promise.all(newSteps.map((step, i) =>
-      supabase.from('steps').update({ order_index: i }).eq('id', step.id)
-    ))
+    await Promise.all(newSteps.map((step, i) => supabase.from('steps').update({ order_index: i }).eq('id', step.id)))
   }
 
   const updateTripName = async () => {
@@ -494,18 +546,24 @@ function TripPage() {
   }
 
   const deleteStep = async (stepId: string) => {
-    if (!confirm('Supprimer cette étape ? Les dépenses associées seront aussi supprimées.')) return
+    if (!confirm('Supprimer cette étape ?')) return
     await supabase.from('steps').delete().eq('id', stepId)
     fetchSteps()
   }
 
   const addExpense = async (stepId: string) => {
     if (!expenseLabel || !expenseAmount) return
+    const paidByMember = members.find(m => m.user_id === expensePaidBy)
+    const paidByName = paidByMember
+      ? (paidByMember.user_id === currentUserId ? (paidByMember.display_name || 'Moi') : (paidByMember.display_name || paidByMember.email?.split('@')[0]))
+      : ''
     await supabase.from('expenses').insert({
       step_id: stepId, label: expenseLabel,
       amount: parseFloat(expenseAmount), category: expenseCategory,
+      paid_by: expensePaidBy || null, paid_by_name: paidByName || null,
     })
     setExpenseLabel(''); setExpenseAmount(''); setExpenseCategory('transport')
+    setExpensePaidBy(currentUserId)
     setActiveStepId(null); fetchExpenses()
   }
 
@@ -518,16 +576,12 @@ function TripPage() {
   const budgetPercent = trip?.budget ? Math.min((totalBudget / trip.budget) * 100, 100) : 0
   const budgetRestant = trip?.budget ? trip.budget - totalBudget : 0
   const barColor = budgetPercent > 90 ? '#c07060' : budgetPercent > 70 ? '#d4af37' : '#6a9e7f'
-
-  const categoryTotals = expenses.reduce((acc, e) => {
-    acc[e.category] = (acc[e.category] || 0) + e.amount
-    return acc
-  }, {} as Record<string, number>)
-
+  const categoryTotals = expenses.reduce((acc, e) => { acc[e.category] = (acc[e.category] || 0) + e.amount; return acc }, {} as Record<string, number>)
   const allCompleted = steps.length > 0 && steps.every(s => s.completed)
   const completedCount = steps.filter(s => s.completed).length
+  const balances = computeBalances()
 
-  useEffect(() => { if (id) { fetchTrip(); fetchSteps() } }, [id])
+  useEffect(() => { if (id) { fetchTrip(); fetchSteps(); fetchMembers() } }, [id])
   useEffect(() => {
     if (steps.length > 0) {
       fetchExpenses()
@@ -535,25 +589,26 @@ function TripPage() {
     }
   }, [steps, trip])
 
-  const categoryEmoji: Record<string, string> = {
-    transport: '🚗', hébergement: '🏨', nourriture: '🍽️', activités: '🎯', autre: '💼'
-  }
+  const categoryEmoji: Record<string, string> = { transport: '🚗', hébergement: '🏨', nourriture: '🍽️', activités: '🎯', autre: '💼' }
   const modeEmoji: Record<string, string> = { driving: '🚗', plane: '✈️', ferry: '⛴️' }
+
+  const getMemberName = (uid: string) => {
+    const m = members.find(x => x.user_id === uid)
+    if (!m) return 'Inconnu'
+    if (m.user_id === currentUserId) return 'Moi'
+    return m.display_name || m.email?.split('@')[0] || 'Membre'
+  }
 
   return (
     <>
-     <style>{`
+      <style>{`
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'DM Sans', sans-serif; background: #f7f4ef; color: #1a1612; }
   .trip-page { min-height: 100vh; }
   .trip-hero { position: relative; height: 280px; background: #1a1612; overflow: hidden; }
   .trip-hero-img { width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
-  .trip-hero-overlay {
-    position: absolute; inset: 0;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%);
-    display: flex; flex-direction: column; justify-content: space-between; padding: 1.5rem 3rem;
-  }
+  .trip-hero-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%); display: flex; flex-direction: column; justify-content: space-between; padding: 1.5rem 3rem; }
   .navbar { display: flex; align-items: center; justify-content: space-between; }
   .nav-logo { font-family: 'Playfair Display', serif; font-size: 1.1rem; letter-spacing: 0.2em; text-transform: uppercase; color: #d4af37; cursor: pointer; }
   .btn-back { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 0.5rem 1rem; border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; backdrop-filter: blur(10px); }
@@ -629,8 +684,14 @@ function TripPage() {
   .empty-title { font-family: 'Playfair Display', serif; font-size: 1.75rem; color: #1a1612; margin-bottom: 0.5rem; }
   .progress-bar-track { height: 6px; background: #f0ebe0; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
   .progress-bar-fill { height: 100%; background: #6a9e7f; border-radius: 4px; transition: width 0.4s ease; }
-
-  /* ── TABLETTE (≤ 1024px) ── */
+  .balance-card { background: #fff; border: 1px solid #e8e0d0; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; }
+  .balance-row { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid #f0ebe0; font-size: 0.88rem; }
+  .balance-row:last-child { border-bottom: none; }
+  .balance-arrow { color: #c07060; font-weight: 500; }
+  .balance-amount { color: #c07060; font-weight: 600; }
+  .members-bar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .member-chip { background: #f0ebe0; border-radius: 20px; padding: 0.3rem 0.85rem; font-size: 0.78rem; color: #5a5248; display: flex; align-items: center; gap: 0.4rem; }
+  .member-chip.owner { background: #0a0a0a; color: #d4af37; }
   @media (max-width: 1024px) {
     .trip-hero-overlay { padding: 1.25rem 1.5rem; }
     .trip-content { padding: 1.5rem; }
@@ -639,8 +700,6 @@ function TripPage() {
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
     .category-grid { grid-template-columns: repeat(3, 1fr); }
   }
-
-  /* ── MOBILE (≤ 640px) ── */
   @media (max-width: 640px) {
     .trip-hero { height: 220px; }
     .trip-hero-overlay { padding: 1rem; }
@@ -669,78 +728,50 @@ function TripPage() {
                   <div className="nav-logo" onClick={() => router.push('/dashboard')}>Roadtrip</div>
                   <button className="btn-back" onClick={() => router.push('/dashboard')}>← Mes voyages</button>
                 </nav>
-            <div>
-              {editingTitle ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <input
-                    autoFocus
-                    value={editingTitleValue}
-                    onChange={e => setEditingTitleValue(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') updateTripName(); if (e.key === 'Escape') setEditingTitle(false) }}
-                    style={{
-                      fontFamily: 'Playfair Display, serif', fontSize: '2.75rem',
-                      background: 'transparent', border: 'none',
-                      borderBottom: '2px solid #d4af37', color: '#fff',
-                      outline: 'none', lineHeight: 1.1, width: '100%',
-                    }}
-                  />
-                  <button onClick={updateTripName} style={{ background: '#d4af37', border: 'none', color: '#0a0a0a', padding: '0.4rem 0.85rem', borderRadius: '4px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
-                    ✓ OK
-                  </button>
-                  <button onClick={() => setEditingTitle(false)} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '0.4rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>
-                    ✕
-                  </button>
+                <div>
+                  {editingTitle ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <input autoFocus value={editingTitleValue} onChange={e => setEditingTitleValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') updateTripName(); if (e.key === 'Escape') setEditingTitle(false) }} style={{ fontFamily: 'Playfair Display, serif', fontSize: '2.75rem', background: 'transparent', border: 'none', borderBottom: '2px solid #d4af37', color: '#fff', outline: 'none', lineHeight: 1.1, width: '100%' }} />
+                      <button onClick={updateTripName} style={{ background: '#d4af37', border: 'none', color: '#0a0a0a', padding: '0.4rem 0.85rem', borderRadius: '4px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>✓ OK</button>
+                      <button onClick={() => setEditingTitle(false)} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '0.4rem 0.75rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <h1 className="trip-title">{trip.name}</h1>
+                      <button onClick={() => { setEditingTitle(true); setEditingTitleValue(trip.name) }} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.6)', padding: '0.3rem 0.6rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', transition: 'all 0.2s', backdropFilter: 'blur(10px)' }}>✏</button>
+                    </div>
+                  )}
+                  {trip.description && <p className="trip-desc">{trip.description}</p>}
                 </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <h1 className="trip-title">{trip.name}</h1>
-                  <button
-                    onClick={() => { setEditingTitle(true); setEditingTitleValue(trip.name) }}
-                    style={{
-                      background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-                      color: 'rgba(255,255,255,0.6)', padding: '0.3rem 0.6rem',
-                      borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem',
-                      transition: 'all 0.2s', backdropFilter: 'blur(10px)',
-                    }}
-                    title="Modifier le nom"
-                  >
-                     ✏
-                   </button>
-                 </div>
-              )}
-               {trip.description && <p className="trip-desc">{trip.description}</p>}
-              </div>
               </div>
             </div>
 
             <div className="trip-content">
+
+              {/* Membres */}
+              {members.length > 0 && (
+                <div className="members-bar">
+                  <span style={{ fontSize: '0.75rem', color: '#8a8070', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Voyageurs</span>
+                  {members.map(m => (
+                    <div key={m.user_id} className={`member-chip ${m.role === 'owner' ? 'owner' : ''}`}>
+                      {m.role === 'owner' ? '👑' : '👤'}
+                      {m.user_id === currentUserId ? 'Moi' : (m.display_name || m.email?.split('@')[0] || 'Membre')}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="stats-grid">
-                <div className="stat-card">
-                  <div className="stat-label">Étapes</div>
-                  <div className="stat-value">{steps.length}</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Dépensé</div>
-                  <div className="stat-value gold">{totalBudget.toFixed(0)} €</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Budget restant</div>
-                  <div className={`stat-value ${budgetRestant < 0 ? 'red' : 'green'}`}>
-                    {trip.budget > 0 ? `${budgetRestant.toFixed(0)} €` : '—'}
-                  </div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-label">Budget prévu</div>
-                  <div className="stat-value">{trip.budget > 0 ? `${trip.budget} €` : '—'}</div>
-                </div>
+                <div className="stat-card"><div className="stat-label">Étapes</div><div className="stat-value">{steps.length}</div></div>
+                <div className="stat-card"><div className="stat-label">Dépensé</div><div className="stat-value gold">{totalBudget.toFixed(0)} €</div></div>
+                <div className="stat-card"><div className="stat-label">Budget restant</div><div className={`stat-value ${budgetRestant < 0 ? 'red' : 'green'}`}>{trip.budget > 0 ? `${budgetRestant.toFixed(0)} €` : '—'}</div></div>
+                <div className="stat-card"><div className="stat-label">Budget prévu</div><div className="stat-value">{trip.budget > 0 ? `${trip.budget} €` : '—'}</div></div>
               </div>
 
               {trip.budget > 0 && (
                 <div className="budget-section">
                   <div className="budget-section-title">Suivi du budget</div>
-                  <div className="budget-bar-track">
-                    <div className="budget-bar-fill" style={{ width: `${budgetPercent}%`, background: barColor }} />
-                  </div>
+                  <div className="budget-bar-track"><div className="budget-bar-fill" style={{ width: `${budgetPercent}%`, background: barColor }} /></div>
                   <div className="budget-bar-labels">
                     <span>{totalBudget.toFixed(0)} € dépensés</span>
                     <span>{budgetPercent.toFixed(0)}% du budget</span>
@@ -760,23 +791,38 @@ function TripPage() {
                 </div>
               )}
 
-              {/* Bandeau voyage terminé */}
+              {/* Récap des balances */}
+              {members.length > 1 && expenses.some(e => e.paid_by) && (
+                <div className="balance-card">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <div className="budget-section-title" style={{ margin: 0 }}>💸 Qui doit quoi ?</div>
+                    <button onClick={() => setShowBalances(!showBalances)} style={{ background: 'transparent', border: '1px solid #e8e0d0', color: '#8a8070', padding: '0.3rem 0.75rem', borderRadius: '4px', fontSize: '0.78rem', cursor: 'pointer' }}>
+                      {showBalances ? 'Masquer' : 'Afficher'}
+                    </button>
+                  </div>
+                  {showBalances && (
+                    balances.length === 0 ? (
+                      <p style={{ fontSize: '0.85rem', color: '#6a9e7f', marginTop: '0.75rem' }}>✓ Tout est équilibré !</p>
+                    ) : (
+                      <div style={{ marginTop: '0.75rem' }}>
+                        {balances.map((b, i) => (
+                          <div key={i} className="balance-row">
+                            <span><strong>{getMemberName(b.from)}</strong> doit à <strong>{getMemberName(b.to)}</strong></span>
+                            <span className="balance-amount">{b.amount.toFixed(2)} €</span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+
               {allCompleted && (
-                <div style={{
-                  background: 'linear-gradient(135deg, #6a9e7f, #4a8a6a)',
-                  color: '#fff', borderRadius: '8px',
-                  padding: '1.25rem 1.5rem', marginBottom: '1.5rem',
-                  display: 'flex', alignItems: 'center', gap: '1rem',
-                  boxShadow: '0 4px 20px rgba(106,158,127,0.3)',
-                }}>
+                <div style={{ background: 'linear-gradient(135deg, #6a9e7f, #4a8a6a)', color: '#fff', borderRadius: '8px', padding: '1.25rem 1.5rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', boxShadow: '0 4px 20px rgba(106,158,127,0.3)' }}>
                   <span style={{ fontSize: '2rem' }}>🎉</span>
                   <div>
-                    <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.2rem', fontWeight: 700 }}>
-                      Voyage terminé !
-                    </div>
-                    <div style={{ fontSize: '0.82rem', opacity: 0.9, marginTop: '0.2rem' }}>
-                      Toutes les {steps.length} étapes ont été validées. Bravo !
-                    </div>
+                    <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.2rem', fontWeight: 700 }}>Voyage terminé !</div>
+                    <div style={{ fontSize: '0.82rem', opacity: 0.9, marginTop: '0.2rem' }}>Toutes les {steps.length} étapes ont été validées. Bravo !</div>
                   </div>
                 </div>
               )}
@@ -784,16 +830,7 @@ function TripPage() {
               <div className="itinerary-layout">
                 <div className="map-column">
                   <div className="map-section">
-                    <Map
-                      steps={steps}
-                      pickMode={pickMode}
-                      onPick={(lat, lng, name) => {
-                        setStepName(name)
-                        setPickedCoords({ lat, lng })
-                        setPickMode(false)
-                        setShowStepForm(true)
-                      }}
-                    />
+                    <Map steps={steps} pickMode={pickMode} onPick={(lat, lng, name) => { setStepName(name); setPickedCoords({ lat, lng }); setPickMode(false); setShowStepForm(true) }} />
                   </div>
                 </div>
 
@@ -801,81 +838,30 @@ function TripPage() {
                   <div className="section-header">
                     <div>
                       <h2 className="section-title">Itinéraire</h2>
-                      {steps.length > 0 && (
-                        <div style={{ fontSize: '0.75rem', color: '#8a8070', marginTop: '0.2rem' }}>
-                          {completedCount}/{steps.length} étapes validées
-                        </div>
-                      )}
-                      {steps.length > 0 && (
-                        <div className="progress-bar-track" style={{ width: '120px' }}>
-                          <div className="progress-bar-fill" style={{ width: `${(completedCount / steps.length) * 100}%` }} />
-                        </div>
-                      )}
+                      {steps.length > 0 && <div style={{ fontSize: '0.75rem', color: '#8a8070', marginTop: '0.2rem' }}>{completedCount}/{steps.length} étapes validées</div>}
+                      {steps.length > 0 && <div className="progress-bar-track" style={{ width: '120px' }}><div className="progress-bar-fill" style={{ width: `${(completedCount / steps.length) * 100}%` }} /></div>}
                     </div>
-                    <button className="btn-primary" onClick={() => { setShowStepForm(!showStepForm); setPickMode(false); setPickedCoords(null) }}>
-                      + Étape
-                    </button>
+                    <button className="btn-primary" onClick={() => { setShowStepForm(!showStepForm); setPickMode(false); setPickedCoords(null) }}>+ Étape</button>
                   </div>
 
                   {showStepForm && (
                     <div className="form-card">
-                      <input
-                        className="form-input"
-                        type="text"
-                        placeholder="Nom de la ville..."
-                        value={stepName}
-                        onChange={e => { setStepName(e.target.value); setPickedCoords(null) }}
-                        onKeyDown={e => e.key === 'Enter' && addStep()}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setPickMode(p => !p)}
-                        style={{
-                          width: '100%', padding: '0.6rem', marginBottom: '0.75rem',
-                          background: pickMode ? '#d4af37' : '#f7f4ef',
-                          color: pickMode ? '#0a0a0a' : '#8a8070',
-                          border: `1px solid ${pickMode ? '#d4af37' : '#e8e0d0'}`,
-                          borderRadius: '4px', fontFamily: 'DM Sans, sans-serif',
-                          fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s',
-                        }}
-                      >
+                      <input className="form-input" type="text" placeholder="Nom de la ville..." value={stepName} onChange={e => { setStepName(e.target.value); setPickedCoords(null) }} onKeyDown={e => e.key === 'Enter' && addStep()} />
+                      <button type="button" onClick={() => setPickMode(p => !p)} style={{ width: '100%', padding: '0.6rem', marginBottom: '0.75rem', background: pickMode ? '#d4af37' : '#f7f4ef', color: pickMode ? '#0a0a0a' : '#8a8070', border: `1px solid ${pickMode ? '#d4af37' : '#e8e0d0'}`, borderRadius: '4px', fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s' }}>
                         {pickMode ? '✓ Cliquez sur la carte ←' : '📍 Placer sur la carte'}
                       </button>
-                      {pickedCoords && (
-                        <div style={{ fontSize: '0.78rem', color: '#6a9e7f', marginBottom: '0.75rem', fontStyle: 'italic' }}>
-                          ✓ {stepName} ({pickedCoords.lat.toFixed(3)}, {pickedCoords.lng.toFixed(3)})
-                        </div>
-                      )}
+                      {pickedCoords && <div style={{ fontSize: '0.78rem', color: '#6a9e7f', marginBottom: '0.75rem', fontStyle: 'italic' }}>✓ {stepName} ({pickedCoords.lat.toFixed(3)}, {pickedCoords.lng.toFixed(3)})</div>}
                       <div className="transport-selector">
                         <label className="transport-label">Transport</label>
                         <div className="transport-options">
-                          {[
-                            { value: 'driving', label: '🚗 Route' },
-                            { value: 'plane', label: '✈️ Avion' },
-                            { value: 'ferry', label: '⛴️ Ferry' },
-                          ].map(mode => (
-                            <button
-                              key={mode.value}
-                              onClick={() => setTransportMode(mode.value)}
-                              style={{
-                                padding: '0.5rem 1rem', borderRadius: '4px',
-                                border: `1px solid ${transportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`,
-                                background: transportMode === mode.value ? '#0a0a0a' : '#f7f4ef',
-                                color: transportMode === mode.value ? '#d4af37' : '#8a8070',
-                                fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem',
-                                cursor: 'pointer', transition: 'all 0.2s',
-                              }}
-                            >
-                              {mode.label}
-                            </button>
+                          {[{ value: 'driving', label: '🚗 Route' }, { value: 'plane', label: '✈️ Avion' }, { value: 'ferry', label: '⛴️ Ferry' }].map(mode => (
+                            <button key={mode.value} onClick={() => setTransportMode(mode.value)} style={{ padding: '0.5rem 1rem', borderRadius: '4px', border: `1px solid ${transportMode === mode.value ? '#0a0a0a' : '#e8e0d0'}`, background: transportMode === mode.value ? '#0a0a0a' : '#f7f4ef', color: transportMode === mode.value ? '#d4af37' : '#8a8070', fontFamily: 'DM Sans, sans-serif', fontSize: '0.8rem', cursor: 'pointer', transition: 'all 0.2s' }}>{mode.label}</button>
                           ))}
                         </div>
                       </div>
                       {addingStep && <p className="loading-indicator">🔍 Recherche en cours...</p>}
                       <div className="form-actions">
-                        <button className="btn-primary" onClick={addStep} disabled={addingStep}>
-                          {addingStep ? 'Recherche...' : 'Ajouter'}
-                        </button>
+                        <button className="btn-primary" onClick={addStep} disabled={addingStep}>{addingStep ? 'Recherche...' : 'Ajouter'}</button>
                         <button className="btn-secondary" onClick={() => { setShowStepForm(false); setPickMode(false); setPickedCoords(null) }}>Annuler</button>
                       </div>
                     </div>
@@ -884,44 +870,30 @@ function TripPage() {
                   {loading ? (
                     <p style={{ color: '#8a8070' }}>Chargement...</p>
                   ) : steps.length === 0 ? (
-                    <div className="empty-state">
-                      <h2 className="empty-title">Aucune étape</h2>
-                      <p>Ajoute ta première destination.</p>
-                    </div>
+                    <div className="empty-state"><h2 className="empty-title">Aucune étape</h2><p>Ajoute ta première destination.</p></div>
                   ) : (
                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                       <SortableContext items={steps.map(s => s.id)} strategy={verticalListSortingStrategy}>
                         <div className="steps-list">
                           {steps.map((step, index) => (
                             <SortableStepCard
-                              weather={stepWeather[step.id]}
                               key={step.id}
-                              step={step}
-                              index={index}
-                              expenses={expenses}
-                              activeStepId={activeStepId}
-                              editingStepId={editingStepId}
-                              editingStepName={editingStepName}
-                              editingTransportMode={editingTransportMode}
-                              addingStep={addingStep}
-                              expenseLabel={expenseLabel}
-                              expenseAmount={expenseAmount}
-                              expenseCategory={expenseCategory}
-                              modeEmoji={modeEmoji}
-                              categoryEmoji={categoryEmoji}
+                              weather={stepWeather[step.id]}
+                              step={step} index={index} expenses={expenses}
+                              activeStepId={activeStepId} editingStepId={editingStepId}
+                              editingStepName={editingStepName} editingTransportMode={editingTransportMode}
+                              addingStep={addingStep} expenseLabel={expenseLabel}
+                              expenseAmount={expenseAmount} expenseCategory={expenseCategory}
+                              expensePaidBy={expensePaidBy} members={members} currentUserId={currentUserId}
+                              modeEmoji={modeEmoji} categoryEmoji={categoryEmoji}
                               onToggleExpense={(sid: string) => setActiveStepId(activeStepId === sid ? null : sid)}
                               onStartEdit={(s: Step) => { setEditingStepId(s.id); setEditingStepName(s.name); setEditingTransportMode(s.transport_mode || 'driving') }}
-                              onDelete={deleteStep}
-                              onToggleComplete={toggleStepComplete}
-                              onEditNameChange={setEditingStepName}
-                              onEditModeChange={setEditingTransportMode}
-                              onUpdateStep={updateStep}
-                              onCancelEdit={() => setEditingStepId(null)}
-                              onExpenseLabelChange={setExpenseLabel}
-                              onExpenseAmountChange={setExpenseAmount}
-                              onExpenseCategoryChange={setExpenseCategory}
-                              onAddExpense={addExpense}
-                              onDeleteExpense={deleteExpense}
+                              onDelete={deleteStep} onToggleComplete={toggleStepComplete}
+                              onEditNameChange={setEditingStepName} onEditModeChange={setEditingTransportMode}
+                              onUpdateStep={updateStep} onCancelEdit={() => setEditingStepId(null)}
+                              onExpenseLabelChange={setExpenseLabel} onExpenseAmountChange={setExpenseAmount}
+                              onExpenseCategoryChange={setExpenseCategory} onExpensePaidByChange={setExpensePaidBy}
+                              onAddExpense={addExpense} onDeleteExpense={deleteExpense}
                             />
                           ))}
                         </div>
