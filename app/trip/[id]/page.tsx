@@ -581,7 +581,29 @@ function TripPage() {
   const completedCount = steps.filter(s => s.completed).length
   const balances = computeBalances()
 
-  useEffect(() => { if (id) { fetchTrip(); fetchSteps(); fetchMembers() } }, [id])
+  useEffect(() => {
+  if (!id) return
+  fetchTrip(); fetchSteps(); fetchMembers()
+
+  const stepsChannel = supabase
+    .channel(`steps:${id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'steps', filter: `trip_id=eq.${id}` }, () => {
+      fetchSteps()
+    })
+    .subscribe()
+
+  const expensesChannel = supabase
+    .channel(`expenses:${id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => {
+      fetchExpenses()
+    })
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(stepsChannel)
+    supabase.removeChannel(expensesChannel)
+  }
+}, [id])
   useEffect(() => {
     if (steps.length > 0) {
       fetchExpenses()
